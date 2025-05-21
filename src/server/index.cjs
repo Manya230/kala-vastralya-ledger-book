@@ -1,7 +1,7 @@
 
 const express = require('express');
 const cors = require('cors');
-const Database = require('better-sqlite3');
+const sqlite3 = require('sqlite3').verbose();
 const multer = require('multer');
 const xlsx = require('xlsx');
 const path = require('path');
@@ -14,9 +14,9 @@ if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-// Set up SQLite database
+// Set up SQLite database using sqlite3 instead of better-sqlite3
 const dbPath = path.join(dataDir, 'kala-vastralya.db');
-const db = new Database(dbPath);
+const db = new sqlite3.Database(dbPath);
 
 // Set up multer for file uploads
 const upload = multer({ dest: path.join(dataDir, 'uploads/') });
@@ -29,128 +29,171 @@ app.use(express.json());
 // Initialize database tables
 function initDb() {
   // Create tables if they don't exist
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS categories (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT UNIQUE
-    );
+  db.serialize(() => {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE
+      )
+    `);
 
-    CREATE TABLE IF NOT EXISTS manufacturers (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT UNIQUE
-    );
+    db.run(`
+      CREATE TABLE IF NOT EXISTS manufacturers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE
+      )
+    `);
 
-    CREATE TABLE IF NOT EXISTS products (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      barcode TEXT UNIQUE,
-      category_id INTEGER,
-      manufacturer_id INTEGER,
-      quantity INTEGER,
-      cost_price REAL,
-      sale_price REAL,
-      FOREIGN KEY (category_id) REFERENCES categories (id),
-      FOREIGN KEY (manufacturer_id) REFERENCES manufacturers (id)
-    );
+    db.run(`
+      CREATE TABLE IF NOT EXISTS products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        barcode TEXT UNIQUE,
+        category_id INTEGER,
+        manufacturer_id INTEGER,
+        quantity INTEGER,
+        cost_price REAL,
+        sale_price REAL,
+        FOREIGN KEY (category_id) REFERENCES categories (id),
+        FOREIGN KEY (manufacturer_id) REFERENCES manufacturers (id)
+      )
+    `);
 
-    CREATE TABLE IF NOT EXISTS sales (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      type TEXT,
-      number TEXT UNIQUE,
-      customer_name TEXT,
-      mobile TEXT,
-      payment_mode TEXT,
-      remarks TEXT,
-      date TEXT,
-      total_amount REAL,
-      total_discount REAL,
-      final_amount REAL
-    );
+    db.run(`
+      CREATE TABLE IF NOT EXISTS sales (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT,
+        number TEXT UNIQUE,
+        customer_name TEXT,
+        mobile TEXT,
+        payment_mode TEXT,
+        remarks TEXT,
+        date TEXT,
+        total_amount REAL,
+        total_discount REAL,
+        final_amount REAL
+      )
+    `);
 
-    CREATE TABLE IF NOT EXISTS sale_items (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      sale_id INTEGER,
-      product_id INTEGER,
-      category_name TEXT,
-      sale_price REAL,
-      quantity INTEGER,
-      item_final_price REAL,
-      FOREIGN KEY (sale_id) REFERENCES sales (id),
-      FOREIGN KEY (product_id) REFERENCES products (id)
-    );
-  `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS sale_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sale_id INTEGER,
+        product_id INTEGER,
+        category_name TEXT,
+        sale_price REAL,
+        quantity INTEGER,
+        item_final_price REAL,
+        FOREIGN KEY (sale_id) REFERENCES sales (id),
+        FOREIGN KEY (product_id) REFERENCES products (id)
+      )
+    `);
 
-  // Add some initial data if tables are empty
-  const categoryCount = db.prepare('SELECT COUNT(*) as count FROM categories').get().count;
-  if (categoryCount === 0) {
-    const categories = ['Sarees', 'Shirts', 'Pants', 'Coord Set'];
-    categories.forEach(category => {
-      db.prepare('INSERT INTO categories (name) VALUES (?)').run(category);
-    });
-  }
-
-  const manufacturerCount = db.prepare('SELECT COUNT(*) as count FROM manufacturers').get().count;
-  if (manufacturerCount === 0) {
-    const manufacturers = ['XYZ Clothing', 'ABC Manufacturer', 'JKL Textiles', 'Geeta tailers'];
-    manufacturers.forEach(manufacturer => {
-      db.prepare('INSERT INTO manufacturers (name) VALUES (?)').run(manufacturer);
-    });
-  }
-  
-  // Add some sample products if needed
-  const productCount = db.prepare('SELECT COUNT(*) as count FROM products').get().count;
-  if (productCount === 0) {
-    const sampleProducts = [
-      {
-        barcode: '12345678',
-        category: 'Sarees',
-        manufacturer: 'XYZ Clothing',
-        quantity: 31,
-        costPrice: 1000,
-        salePrice: 2000
-      },
-      {
-        barcode: '87654321',
-        category: 'Coord Set',
-        manufacturer: 'ABC Manufacturer',
-        quantity: 20,
-        costPrice: 3500,
-        salePrice: 5000
-      },
-      {
-        barcode: '10101010',
-        category: 'Shirts',
-        manufacturer: 'JKL Textiles',
-        quantity: 24,
-        costPrice: 150,
-        salePrice: 300
-      },
-      {
-        barcode: '10000000',
-        category: 'Pants',
-        manufacturer: 'Geeta tailers',
-        quantity: 32,
-        costPrice: 500,
-        salePrice: 860
+    // Check if categories table is empty
+    db.get('SELECT COUNT(*) as count FROM categories', (err, row) => {
+      if (err) {
+        console.error('Error checking categories table:', err);
+        return;
       }
-    ];
-
-    sampleProducts.forEach(product => {
-      const categoryId = db.prepare('SELECT id FROM categories WHERE name = ?').get(product.category).id;
-      const manufacturerId = db.prepare('SELECT id FROM manufacturers WHERE name = ?').get(product.manufacturer).id;
-
-      db.prepare(`
-        INSERT INTO products (barcode, category_id, manufacturer_id, quantity, cost_price, sale_price)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(
-        product.barcode,
-        categoryId,
-        manufacturerId,
-        product.quantity,
-        product.costPrice,
-        product.salePrice
-      );
+      
+      if (row.count === 0) {
+        const categories = ['Sarees', 'Shirts', 'Pants', 'Coord Set'];
+        categories.forEach(category => {
+          db.run('INSERT INTO categories (name) VALUES (?)', [category]);
+        });
+      }
     });
-  }
+
+    // Check if manufacturers table is empty
+    db.get('SELECT COUNT(*) as count FROM manufacturers', (err, row) => {
+      if (err) {
+        console.error('Error checking manufacturers table:', err);
+        return;
+      }
+      
+      if (row.count === 0) {
+        const manufacturers = ['XYZ Clothing', 'ABC Manufacturer', 'JKL Textiles', 'Geeta tailers'];
+        manufacturers.forEach(manufacturer => {
+          db.run('INSERT INTO manufacturers (name) VALUES (?)', [manufacturer]);
+        });
+      }
+    });
+    
+    // Add some sample products if needed
+    db.get('SELECT COUNT(*) as count FROM products', (err, row) => {
+      if (err) {
+        console.error('Error checking products table:', err);
+        return;
+      }
+      
+      if (row.count === 0) {
+        const sampleProducts = [
+          {
+            barcode: '12345678',
+            category: 'Sarees',
+            manufacturer: 'XYZ Clothing',
+            quantity: 31,
+            costPrice: 1000,
+            salePrice: 2000
+          },
+          {
+            barcode: '87654321',
+            category: 'Coord Set',
+            manufacturer: 'ABC Manufacturer',
+            quantity: 20,
+            costPrice: 3500,
+            salePrice: 5000
+          },
+          {
+            barcode: '10101010',
+            category: 'Shirts',
+            manufacturer: 'JKL Textiles',
+            quantity: 24,
+            costPrice: 150,
+            salePrice: 300
+          },
+          {
+            barcode: '10000000',
+            category: 'Pants',
+            manufacturer: 'Geeta tailers',
+            quantity: 32,
+            costPrice: 500,
+            salePrice: 860
+          }
+        ];
+
+        sampleProducts.forEach(product => {
+          // Get category ID
+          db.get('SELECT id FROM categories WHERE name = ?', [product.category], (err, categoryRow) => {
+            if (err || !categoryRow) {
+              console.error('Error finding category:', err);
+              return;
+            }
+            
+            // Get manufacturer ID
+            db.get('SELECT id FROM manufacturers WHERE name = ?', [product.manufacturer], (err, manufacturerRow) => {
+              if (err || !manufacturerRow) {
+                console.error('Error finding manufacturer:', err);
+                return;
+              }
+              
+              // Insert product
+              db.run(`
+                INSERT INTO products (barcode, category_id, manufacturer_id, quantity, cost_price, sale_price)
+                VALUES (?, ?, ?, ?, ?, ?)
+              `, [
+                product.barcode,
+                categoryRow.id,
+                manufacturerRow.id,
+                product.quantity,
+                product.costPrice,
+                product.salePrice
+              ]);
+            });
+          });
+        });
+      }
+    });
+  });
 }
 
 // Initialize database
@@ -168,8 +211,13 @@ function getCurrentDateIST() {
 // Get all categories
 app.get('/api/categories', (req, res) => {
   try {
-    const categories = db.prepare('SELECT * FROM categories ORDER BY name').all();
-    res.json(categories);
+    db.all('SELECT * FROM categories ORDER BY name', (err, rows) => {
+      if (err) {
+        console.error('Error fetching categories:', err);
+        return res.status(500).json({ error: 'Failed to fetch categories' });
+      }
+      res.json(rows);
+    });
   } catch (error) {
     console.error('Error fetching categories:', error);
     res.status(500).json({ error: 'Failed to fetch categories' });
@@ -185,12 +233,18 @@ app.post('/api/categories', (req, res) => {
   }
 
   try {
-    const result = db.prepare('INSERT INTO categories (name) VALUES (?)').run(name);
-    res.status(201).json({ id: result.lastInsertRowid, name });
+    db.run('INSERT INTO categories (name) VALUES (?)', [name], function(err) {
+      if (err) {
+        if (err.message.includes('UNIQUE constraint failed')) {
+          return res.status(409).json({ error: 'Category already exists' });
+        }
+        console.error('Error creating category:', err);
+        return res.status(500).json({ error: 'Failed to create category' });
+      }
+      
+      res.status(201).json({ id: this.lastID, name });
+    });
   } catch (error) {
-    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-      return res.status(409).json({ error: 'Category already exists' });
-    }
     console.error('Error creating category:', error);
     res.status(500).json({ error: 'Failed to create category' });
   }
@@ -203,8 +257,13 @@ app.post('/api/categories', (req, res) => {
 // Get all manufacturers
 app.get('/api/manufacturers', (req, res) => {
   try {
-    const manufacturers = db.prepare('SELECT * FROM manufacturers ORDER BY name').all();
-    res.json(manufacturers);
+    db.all('SELECT * FROM manufacturers ORDER BY name', (err, rows) => {
+      if (err) {
+        console.error('Error fetching manufacturers:', err);
+        return res.status(500).json({ error: 'Failed to fetch manufacturers' });
+      }
+      res.json(rows);
+    });
   } catch (error) {
     console.error('Error fetching manufacturers:', error);
     res.status(500).json({ error: 'Failed to fetch manufacturers' });
@@ -220,12 +279,18 @@ app.post('/api/manufacturers', (req, res) => {
   }
 
   try {
-    const result = db.prepare('INSERT INTO manufacturers (name) VALUES (?)').run(name);
-    res.status(201).json({ id: result.lastInsertRowid, name });
+    db.run('INSERT INTO manufacturers (name) VALUES (?)', [name], function(err) {
+      if (err) {
+        if (err.message.includes('UNIQUE constraint failed')) {
+          return res.status(409).json({ error: 'Manufacturer already exists' });
+        }
+        console.error('Error creating manufacturer:', err);
+        return res.status(500).json({ error: 'Failed to create manufacturer' });
+      }
+      
+      res.status(201).json({ id: this.lastID, name });
+    });
   } catch (error) {
-    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-      return res.status(409).json({ error: 'Manufacturer already exists' });
-    }
     console.error('Error creating manufacturer:', error);
     res.status(500).json({ error: 'Failed to create manufacturer' });
   }
@@ -238,7 +303,7 @@ app.post('/api/manufacturers', (req, res) => {
 // Get all products with category and manufacturer names
 app.get('/api/products', (req, res) => {
   try {
-    const products = db.prepare(`
+    db.all(`
       SELECT 
         p.id,
         p.barcode,
@@ -252,9 +317,14 @@ app.get('/api/products', (req, res) => {
       FROM products p
       JOIN categories c ON p.category_id = c.id
       JOIN manufacturers m ON p.manufacturer_id = m.id
-    `).all();
-    
-    res.json(products);
+    `, (err, rows) => {
+      if (err) {
+        console.error('Error fetching products:', err);
+        return res.status(500).json({ error: 'Failed to fetch products' });
+      }
+      
+      res.json(rows);
+    });
   } catch (error) {
     console.error('Error fetching products:', error);
     res.status(500).json({ error: 'Failed to fetch products' });
@@ -266,7 +336,7 @@ app.get('/api/products/:barcode', (req, res) => {
   const { barcode } = req.params;
   
   try {
-    const product = db.prepare(`
+    db.get(`
       SELECT 
         p.id,
         p.barcode,
@@ -279,13 +349,18 @@ app.get('/api/products/:barcode', (req, res) => {
       JOIN categories c ON p.category_id = c.id
       JOIN manufacturers m ON p.manufacturer_id = m.id
       WHERE p.barcode = ?
-    `).get(barcode);
-    
-    if (!product) {
-      return res.status(404).json({ error: 'Product not found' });
-    }
-    
-    res.json(product);
+    `, [barcode], (err, row) => {
+      if (err) {
+        console.error('Error fetching product:', err);
+        return res.status(500).json({ error: 'Failed to fetch product' });
+      }
+      
+      if (!row) {
+        return res.status(404).json({ error: 'Product not found' });
+      }
+      
+      res.json(row);
+    });
   } catch (error) {
     console.error('Error fetching product:', error);
     res.status(500).json({ error: 'Failed to fetch product' });
@@ -301,24 +376,29 @@ app.post('/api/products', (req, res) => {
   }
   
   try {
-    const result = db.prepare(`
+    db.run(`
       INSERT INTO products (barcode, category_id, manufacturer_id, quantity, cost_price, sale_price)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(barcode, category_id, manufacturer_id, quantity, cost_price, sale_price);
-    
-    res.status(201).json({ 
-      id: result.lastInsertRowid,
-      barcode,
-      category_id,
-      manufacturer_id,
-      quantity,
-      cost_price,
-      sale_price
+    `, [barcode, category_id, manufacturer_id, quantity, cost_price, sale_price], function(err) {
+      if (err) {
+        if (err.message.includes('UNIQUE constraint failed')) {
+          return res.status(409).json({ error: 'Barcode already exists' });
+        }
+        console.error('Error creating product:', err);
+        return res.status(500).json({ error: 'Failed to create product' });
+      }
+      
+      res.status(201).json({ 
+        id: this.lastID,
+        barcode,
+        category_id,
+        manufacturer_id,
+        quantity,
+        cost_price,
+        sale_price
+      });
     });
   } catch (error) {
-    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-      return res.status(409).json({ error: 'Barcode already exists' });
-    }
     console.error('Error creating product:', error);
     res.status(500).json({ error: 'Failed to create product' });
   }
@@ -330,15 +410,25 @@ app.patch('/api/products/:id/quantity', (req, res) => {
   const { quantity } = req.body;
   
   try {
-    const product = db.prepare('SELECT * FROM products WHERE id = ?').get(id);
-    
-    if (!product) {
-      return res.status(404).json({ error: 'Product not found' });
-    }
-    
-    db.prepare('UPDATE products SET quantity = ? WHERE id = ?').run(quantity, id);
-    
-    res.json({ id, quantity });
+    db.get('SELECT * FROM products WHERE id = ?', [id], (err, row) => {
+      if (err) {
+        console.error('Error finding product:', err);
+        return res.status(500).json({ error: 'Failed to update product quantity' });
+      }
+      
+      if (!row) {
+        return res.status(404).json({ error: 'Product not found' });
+      }
+      
+      db.run('UPDATE products SET quantity = ? WHERE id = ?', [quantity, id], (err) => {
+        if (err) {
+          console.error('Error updating product quantity:', err);
+          return res.status(500).json({ error: 'Failed to update product quantity' });
+        }
+        
+        res.json({ id, quantity });
+      });
+    });
   } catch (error) {
     console.error('Error updating product quantity:', error);
     res.status(500).json({ error: 'Failed to update product quantity' });
@@ -368,81 +458,124 @@ app.post('/api/sales', (req, res) => {
   }
   
   const date = getCurrentDateIST();
-  
+
+  // This will be a more complex operation with sqlite3
+  // We need to implement transactions manually
   try {
-    // Start a transaction
-    const transaction = db.transaction(() => {
+    db.serialize(() => {
+      db.run('BEGIN TRANSACTION');
+      
       // Generate the next number
       const prefix = type === 'bill' ? 'BILL' : 'EST';
-      const lastSale = db.prepare(`
+      db.get(`
         SELECT number FROM sales WHERE type = ? ORDER BY id DESC LIMIT 1
-      `).get(type);
-      
-      let nextNumber = 1;
-      if (lastSale) {
-        const lastNumberStr = lastSale.number.split('-')[1];
-        nextNumber = parseInt(lastNumberStr, 10) + 1;
-      }
-      
-      const formattedNumber = `${prefix}-${String(nextNumber).padStart(4, '0')}`;
-      const finalCustomerName = customer_name || 'Walk In Customer';
-      
-      // Insert the sale
-      const saleResult = db.prepare(`
-        INSERT INTO sales (
-          type, number, customer_name, mobile, payment_mode, remarks, 
-          date, total_amount, total_discount, final_amount
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        type, 
-        formattedNumber, 
-        finalCustomerName, 
-        mobile || null, 
-        payment_mode || null, 
-        remarks || null,
-        date,
-        total_amount,
-        total_discount || 0,
-        final_amount
-      );
-      
-      const saleId = saleResult.lastInsertRowid;
-      
-      // Insert sale items and update inventory
-      items.forEach(item => {
-        // Insert sale item
-        db.prepare(`
-          INSERT INTO sale_items (
-            sale_id, product_id, category_name, sale_price, quantity, item_final_price
-          ) VALUES (?, ?, ?, ?, ?, ?)
-        `).run(
-          saleId,
-          item.product_id,
-          item.category_name,
-          item.sale_price,
-          item.quantity,
-          item.item_final_price
-        );
+      `, [type], (err, lastSale) => {
+        if (err) {
+          console.error('Error generating sale number:', err);
+          db.run('ROLLBACK');
+          return res.status(500).json({ error: 'Failed to create sale' });
+        }
         
-        // Update product quantity
-        db.prepare(`
-          UPDATE products 
-          SET quantity = quantity - ? 
-          WHERE id = ?
-        `).run(item.quantity, item.product_id);
+        let nextNumber = 1;
+        if (lastSale) {
+          const lastNumberStr = lastSale.number.split('-')[1];
+          nextNumber = parseInt(lastNumberStr, 10) + 1;
+        }
+        
+        const formattedNumber = `${prefix}-${String(nextNumber).padStart(4, '0')}`;
+        const finalCustomerName = customer_name || 'Walk In Customer';
+        
+        // Insert the sale
+        db.run(`
+          INSERT INTO sales (
+            type, number, customer_name, mobile, payment_mode, remarks, 
+            date, total_amount, total_discount, final_amount
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          type, 
+          formattedNumber, 
+          finalCustomerName, 
+          mobile || null, 
+          payment_mode || null, 
+          remarks || null,
+          date,
+          total_amount,
+          total_discount || 0,
+          final_amount
+        ], function(err) {
+          if (err) {
+            console.error('Error creating sale:', err);
+            db.run('ROLLBACK');
+            return res.status(500).json({ error: 'Failed to create sale' });
+          }
+          
+          const saleId = this.lastID;
+          let completed = 0;
+          let errors = false;
+          
+          // Insert sale items and update inventory
+          items.forEach((item, index) => {
+            // Insert sale item
+            db.run(`
+              INSERT INTO sale_items (
+                sale_id, product_id, category_name, sale_price, quantity, item_final_price
+              ) VALUES (?, ?, ?, ?, ?, ?)
+            `, [
+              saleId,
+              item.product_id,
+              item.category_name,
+              item.sale_price,
+              item.quantity,
+              item.item_final_price
+            ], function(err) {
+              if (err) {
+                console.error('Error inserting sale item:', err);
+                errors = true;
+              }
+              
+              // Update product quantity
+              db.run(`
+                UPDATE products 
+                SET quantity = quantity - ? 
+                WHERE id = ?
+              `, [item.quantity, item.product_id], function(err) {
+                if (err) {
+                  console.error('Error updating product quantity:', err);
+                  errors = true;
+                }
+                
+                completed++;
+                
+                // If all items are processed
+                if (completed === items.length) {
+                  if (errors) {
+                    db.run('ROLLBACK');
+                    return res.status(500).json({ error: 'Failed to create sale' });
+                  } else {
+                    db.run('COMMIT');
+                    return res.status(201).json({
+                      id: saleId,
+                      number: formattedNumber,
+                      date: date
+                    });
+                  }
+                }
+              });
+            });
+          });
+          
+          // If there are no items
+          if (items.length === 0) {
+            db.run('COMMIT');
+            return res.status(201).json({
+              id: saleId,
+              number: formattedNumber,
+              date: date
+            });
+          }
+        });
       });
-      
-      return {
-        id: saleId,
-        number: formattedNumber,
-        date: date
-      };
     });
-    
-    // Execute the transaction
-    const result = transaction();
-    
-    res.status(201).json(result);
   } catch (error) {
     console.error('Error creating sale:', error);
     res.status(500).json({ error: 'Failed to create sale' });
@@ -488,9 +621,14 @@ app.get('/api/sales', (req, res) => {
     // Order by date descending
     query += ` ORDER BY s.date DESC`;
     
-    const sales = db.prepare(query).all(...queryParams);
-    
-    res.json(sales);
+    db.all(query, queryParams, (err, rows) => {
+      if (err) {
+        console.error('Error fetching sales:', err);
+        return res.status(500).json({ error: 'Failed to fetch sales' });
+      }
+      
+      res.json(rows);
+    });
   } catch (error) {
     console.error('Error fetching sales:', error);
     res.status(500).json({ error: 'Failed to fetch sales' });
@@ -502,31 +640,41 @@ app.get('/api/sales/:id', (req, res) => {
   const { id } = req.params;
   
   try {
-    const sale = db.prepare(`
+    db.get(`
       SELECT 
         s.id, s.type, s.number, s.customer_name, s.mobile, 
         s.payment_mode, s.remarks, s.date, s.total_amount, s.total_discount, s.final_amount
       FROM sales s
       WHERE s.id = ?
-    `).get(id);
-    
-    if (!sale) {
-      return res.status(404).json({ error: 'Sale not found' });
-    }
-    
-    const items = db.prepare(`
-      SELECT 
-        si.id, si.product_id, si.category_name, si.sale_price, 
-        si.quantity, si.item_final_price,
-        p.barcode
-      FROM sale_items si
-      LEFT JOIN products p ON si.product_id = p.id
-      WHERE si.sale_id = ?
-    `).all(id);
-    
-    sale.items = items;
-    
-    res.json(sale);
+    `, [id], (err, sale) => {
+      if (err) {
+        console.error('Error fetching sale:', err);
+        return res.status(500).json({ error: 'Failed to fetch sale details' });
+      }
+      
+      if (!sale) {
+        return res.status(404).json({ error: 'Sale not found' });
+      }
+      
+      db.all(`
+        SELECT 
+          si.id, si.product_id, si.category_name, si.sale_price, 
+          si.quantity, si.item_final_price,
+          p.barcode
+        FROM sale_items si
+        LEFT JOIN products p ON si.product_id = p.id
+        WHERE si.sale_id = ?
+      `, [id], (err, items) => {
+        if (err) {
+          console.error('Error fetching sale items:', err);
+          return res.status(500).json({ error: 'Failed to fetch sale details' });
+        }
+        
+        sale.items = items;
+        
+        res.json(sale);
+      });
+    });
   } catch (error) {
     console.error('Error fetching sale details:', error);
     res.status(500).json({ error: 'Failed to fetch sale details' });
@@ -548,76 +696,147 @@ app.put('/api/sales/:id', (req, res) => {
   }
   
   try {
-    // Start a transaction
-    const transaction = db.transaction(() => {
+    db.serialize(() => {
+      db.run('BEGIN TRANSACTION');
+      
       // Get the original sale
-      const originalSale = db.prepare('SELECT * FROM sales WHERE id = ?').get(id);
-      
-      if (!originalSale) {
-        throw new Error('Sale not found');
-      }
-      
-      // Get original sale items to restore inventory
-      const originalItems = db.prepare('SELECT * FROM sale_items WHERE sale_id = ?').all(id);
-      
-      // Restore inventory quantities for original items
-      originalItems.forEach(item => {
-        db.prepare(`
-          UPDATE products
-          SET quantity = quantity + ?
-          WHERE id = ?
-        `).run(item.quantity, item.product_id);
-      });
-      
-      // Update the sale
-      db.prepare(`
-        UPDATE sales
-        SET total_amount = ?, total_discount = ?, final_amount = ?
-        WHERE id = ?
-      `).run(total_amount, total_discount || 0, final_amount, id);
-      
-      // Delete all existing sale items
-      db.prepare('DELETE FROM sale_items WHERE sale_id = ?').run(id);
-      
-      // Insert updated sale items
-      items.forEach(item => {
-        // Insert sale item
-        db.prepare(`
-          INSERT INTO sale_items (
-            sale_id, product_id, category_name, sale_price, quantity, item_final_price
-          ) VALUES (?, ?, ?, ?, ?, ?)
-        `).run(
-          id,
-          item.product_id,
-          item.category_name,
-          item.sale_price,
-          item.quantity,
-          item.item_final_price
-        );
+      db.get('SELECT * FROM sales WHERE id = ?', [id], (err, originalSale) => {
+        if (err) {
+          console.error('Error fetching original sale:', err);
+          db.run('ROLLBACK');
+          return res.status(500).json({ error: 'Failed to update sale' });
+        }
         
-        // Update product quantity
-        db.prepare(`
-          UPDATE products 
-          SET quantity = quantity - ? 
-          WHERE id = ?
-        `).run(item.quantity, item.product_id);
+        if (!originalSale) {
+          db.run('ROLLBACK');
+          return res.status(404).json({ error: 'Sale not found' });
+        }
+        
+        // Get original sale items to restore inventory
+        db.all('SELECT * FROM sale_items WHERE sale_id = ?', [id], (err, originalItems) => {
+          if (err) {
+            console.error('Error fetching original sale items:', err);
+            db.run('ROLLBACK');
+            return res.status(500).json({ error: 'Failed to update sale' });
+          }
+          
+          let restoredCount = 0;
+          
+          // If no original items, skip restoring inventory
+          if (originalItems.length === 0) {
+            updateSale();
+            return;
+          }
+          
+          // Restore inventory quantities for original items
+          originalItems.forEach((item, index) => {
+            db.run(`
+              UPDATE products
+              SET quantity = quantity + ?
+              WHERE id = ?
+            `, [item.quantity, item.product_id], function(err) {
+              if (err) {
+                console.error('Error restoring inventory:', err);
+                db.run('ROLLBACK');
+                return res.status(500).json({ error: 'Failed to update sale' });
+              }
+              
+              restoredCount++;
+              if (restoredCount === originalItems.length) {
+                // All original items processed, continue with update
+                updateSale();
+              }
+            });
+          });
+          
+          function updateSale() {
+            // Update the sale
+            db.run(`
+              UPDATE sales
+              SET total_amount = ?, total_discount = ?, final_amount = ?
+              WHERE id = ?
+            `, [total_amount, total_discount || 0, final_amount, id], function(err) {
+              if (err) {
+                console.error('Error updating sale:', err);
+                db.run('ROLLBACK');
+                return res.status(500).json({ error: 'Failed to update sale' });
+              }
+              
+              // Delete all existing sale items
+              db.run('DELETE FROM sale_items WHERE sale_id = ?', [id], function(err) {
+                if (err) {
+                  console.error('Error deleting sale items:', err);
+                  db.run('ROLLBACK');
+                  return res.status(500).json({ error: 'Failed to update sale' });
+                }
+                
+                let completedItems = 0;
+                let errors = false;
+                
+                // Insert updated sale items
+                if (items.length === 0) {
+                  db.run('COMMIT');
+                  return res.json({
+                    id: parseInt(id),
+                    message: 'Sale updated successfully'
+                  });
+                }
+                
+                items.forEach((item, index) => {
+                  // Insert sale item
+                  db.run(`
+                    INSERT INTO sale_items (
+                      sale_id, product_id, category_name, sale_price, quantity, item_final_price
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                  `, [
+                    id,
+                    item.product_id,
+                    item.category_name,
+                    item.sale_price,
+                    item.quantity,
+                    item.item_final_price
+                  ], function(err) {
+                    if (err) {
+                      console.error('Error inserting sale item:', err);
+                      errors = true;
+                    }
+                    
+                    // Update product quantity
+                    db.run(`
+                      UPDATE products 
+                      SET quantity = quantity - ? 
+                      WHERE id = ?
+                    `, [item.quantity, item.product_id], function(err) {
+                      if (err) {
+                        console.error('Error updating product quantity:', err);
+                        errors = true;
+                      }
+                      
+                      completedItems++;
+                      
+                      if (completedItems === items.length) {
+                        if (errors) {
+                          db.run('ROLLBACK');
+                          return res.status(500).json({ error: 'Failed to update sale' });
+                        } else {
+                          db.run('COMMIT');
+                          return res.json({
+                            id: parseInt(id),
+                            message: 'Sale updated successfully'
+                          });
+                        }
+                      }
+                    });
+                  });
+                });
+              });
+            });
+          }
+        });
       });
-      
-      return originalSale;
-    });
-    
-    // Execute the transaction
-    const result = transaction();
-    
-    res.json({
-      id: parseInt(id),
-      message: 'Sale updated successfully'
     });
   } catch (error) {
     console.error('Error updating sale:', error);
-    if (error.message === 'Sale not found') {
-      return res.status(404).json({ error: 'Sale not found' });
-    }
     res.status(500).json({ error: 'Failed to update sale' });
   }
 });
@@ -653,85 +872,168 @@ app.post('/api/import/products', upload.single('file'), (req, res) => {
       });
     }
     
-    // Start a transaction
-    const transaction = db.transaction(() => {
+    db.serialize(() => {
+      db.run('BEGIN TRANSACTION');
+      
       let imported = 0;
       let errors = [];
+      let completed = 0;
       
       data.forEach((row, index) => {
         try {
           // Get or create category
-          let categoryId;
-          const existingCategory = db.prepare('SELECT id FROM categories WHERE name = ?').get(row.category);
-          
-          if (existingCategory) {
-            categoryId = existingCategory.id;
-          } else {
-            const result = db.prepare('INSERT INTO categories (name) VALUES (?)').run(row.category);
-            categoryId = result.lastInsertRowid;
-          }
-          
-          // Get or create manufacturer
-          let manufacturerId;
-          const existingManufacturer = db.prepare('SELECT id FROM manufacturers WHERE name = ?').get(row.manufacturer);
-          
-          if (existingManufacturer) {
-            manufacturerId = existingManufacturer.id;
-          } else {
-            const result = db.prepare('INSERT INTO manufacturers (name) VALUES (?)').run(row.manufacturer);
-            manufacturerId = result.lastInsertRowid;
-          }
-          
-          // Check if product exists
-          const existingProduct = db.prepare('SELECT * FROM products WHERE barcode = ?').get(row.barcode);
-          
-          if (existingProduct) {
-            // Update existing product
-            db.prepare(`
-              UPDATE products
-              SET category_id = ?, manufacturer_id = ?, quantity = ?, cost_price = ?, sale_price = ?
-              WHERE id = ?
-            `).run(
-              categoryId,
-              manufacturerId,
-              row.quantity,
-              row.cost_price,
-              row.sale_price,
-              existingProduct.id
-            );
-          } else {
-            // Insert new product
-            db.prepare(`
-              INSERT INTO products (barcode, category_id, manufacturer_id, quantity, cost_price, sale_price)
-              VALUES (?, ?, ?, ?, ?, ?)
-            `).run(
-              row.barcode,
-              categoryId,
-              manufacturerId,
-              row.quantity,
-              row.cost_price,
-              row.sale_price
-            );
-          }
-          
-          imported++;
+          db.get('SELECT id FROM categories WHERE name = ?', [row.category], (err, existingCategory) => {
+            if (err) {
+              errors.push({ row: index + 1, error: err.message });
+              processComplete();
+              return;
+            }
+            
+            let categoryId;
+            
+            const processManufacturer = () => {
+              // Get or create manufacturer
+              db.get('SELECT id FROM manufacturers WHERE name = ?', [row.manufacturer], (err, existingManufacturer) => {
+                if (err) {
+                  errors.push({ row: index + 1, error: err.message });
+                  processComplete();
+                  return;
+                }
+                
+                let manufacturerId;
+                
+                const processProduct = () => {
+                  // Check if product exists
+                  db.get('SELECT * FROM products WHERE barcode = ?', [row.barcode], (err, existingProduct) => {
+                    if (err) {
+                      errors.push({ row: index + 1, error: err.message });
+                      processComplete();
+                      return;
+                    }
+                    
+                    if (existingProduct) {
+                      // Update existing product
+                      db.run(`
+                        UPDATE products
+                        SET category_id = ?, manufacturer_id = ?, quantity = ?, cost_price = ?, sale_price = ?
+                        WHERE id = ?
+                      `, [
+                        categoryId,
+                        manufacturerId,
+                        row.quantity,
+                        row.cost_price,
+                        row.sale_price,
+                        existingProduct.id
+                      ], (err) => {
+                        if (err) {
+                          errors.push({ row: index + 1, error: err.message });
+                        } else {
+                          imported++;
+                        }
+                        processComplete();
+                      });
+                    } else {
+                      // Insert new product
+                      db.run(`
+                        INSERT INTO products (barcode, category_id, manufacturer_id, quantity, cost_price, sale_price)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                      `, [
+                        row.barcode,
+                        categoryId,
+                        manufacturerId,
+                        row.quantity,
+                        row.cost_price,
+                        row.sale_price
+                      ], (err) => {
+                        if (err) {
+                          errors.push({ row: index + 1, error: err.message });
+                        } else {
+                          imported++;
+                        }
+                        processComplete();
+                      });
+                    }
+                  });
+                };
+                
+                if (existingManufacturer) {
+                  manufacturerId = existingManufacturer.id;
+                  processProduct();
+                } else {
+                  db.run('INSERT INTO manufacturers (name) VALUES (?)', [row.manufacturer], function(err) {
+                    if (err) {
+                      errors.push({ row: index + 1, error: err.message });
+                      processComplete();
+                      return;
+                    }
+                    manufacturerId = this.lastID;
+                    processProduct();
+                  });
+                }
+              });
+            };
+            
+            if (existingCategory) {
+              categoryId = existingCategory.id;
+              processManufacturer();
+            } else {
+              db.run('INSERT INTO categories (name) VALUES (?)', [row.category], function(err) {
+                if (err) {
+                  errors.push({ row: index + 1, error: err.message });
+                  processComplete();
+                  return;
+                }
+                categoryId = this.lastID;
+                processManufacturer();
+              });
+            }
+          });
         } catch (err) {
           errors.push({ row: index + 1, error: err.message });
+          processComplete();
         }
       });
       
-      return { imported, errors };
-    });
-    
-    // Execute the transaction
-    const result = transaction();
-    
-    // Clean up the temporary file
-    fs.unlinkSync(filePath);
-    
-    res.json({
-      message: `Successfully imported ${result.imported} products`,
-      errors: result.errors
+      function processComplete() {
+        completed++;
+        
+        if (completed === data.length) {
+          if (errors.length > 0 && imported === 0) {
+            db.run('ROLLBACK');
+            // Clean up the temporary file
+            if (fs.existsSync(filePath)) {
+              fs.unlinkSync(filePath);
+            }
+            return res.status(500).json({ 
+              error: 'Failed to import products', 
+              details: errors 
+            });
+          } else {
+            db.run('COMMIT');
+            // Clean up the temporary file
+            if (fs.existsSync(filePath)) {
+              fs.unlinkSync(filePath);
+            }
+            return res.json({
+              message: `Successfully imported ${imported} products`,
+              errors: errors.length > 0 ? errors : []
+            });
+          }
+        }
+      }
+      
+      // If no data to process
+      if (data.length === 0) {
+        db.run('COMMIT');
+        // Clean up the temporary file
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+        return res.json({
+          message: 'No products to import',
+          errors: []
+        });
+      }
     });
   } catch (error) {
     console.error('Error importing products:', error);
@@ -748,7 +1050,7 @@ app.post('/api/import/products', upload.single('file'), (req, res) => {
 // Export products to Excel
 app.get('/api/export/products', (req, res) => {
   try {
-    const products = db.prepare(`
+    db.all(`
       SELECT 
         p.barcode,
         c.name AS category,
@@ -759,28 +1061,33 @@ app.get('/api/export/products', (req, res) => {
       FROM products p
       JOIN categories c ON p.category_id = c.id
       JOIN manufacturers m ON p.manufacturer_id = m.id
-    `).all();
-    
-    if (products.length === 0) {
-      return res.status(404).json({ error: 'No products found to export' });
-    }
-    
-    // Create a new workbook
-    const workbook = xlsx.utils.book_new();
-    const worksheet = xlsx.utils.json_to_sheet(products);
-    
-    // Add the worksheet to the workbook
-    xlsx.utils.book_append_sheet(workbook, worksheet, 'Products');
-    
-    // Create a buffer
-    const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-    
-    // Set headers
-    res.setHeader('Content-Disposition', 'attachment; filename=products.xlsx');
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    
-    // Send the buffer
-    res.send(buffer);
+    `, (err, products) => {
+      if (err) {
+        console.error('Error exporting products:', err);
+        return res.status(500).json({ error: 'Failed to export products' });
+      }
+      
+      if (products.length === 0) {
+        return res.status(404).json({ error: 'No products found to export' });
+      }
+      
+      // Create a new workbook
+      const workbook = xlsx.utils.book_new();
+      const worksheet = xlsx.utils.json_to_sheet(products);
+      
+      // Add the worksheet to the workbook
+      xlsx.utils.book_append_sheet(workbook, worksheet, 'Products');
+      
+      // Create a buffer
+      const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+      
+      // Set headers
+      res.setHeader('Content-Disposition', 'attachment; filename=products.xlsx');
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      
+      // Send the buffer
+      res.send(buffer);
+    });
   } catch (error) {
     console.error('Error exporting products:', error);
     res.status(500).json({ error: 'Failed to export products' });
@@ -826,42 +1133,62 @@ app.get('/api/export/sales', (req, res) => {
     // Order by date descending
     query += ` ORDER BY s.date DESC`;
     
-    const sales = db.prepare(query).all(...queryParams);
-    
-    if (sales.length === 0) {
-      return res.status(404).json({ error: 'No sales found to export' });
-    }
-    
-    // Get items for each sale
-    const salesWithItems = sales.map(sale => {
-      const items = db.prepare(`
-        SELECT 
-          si.product_id, si.category_name, si.sale_price, 
-          si.quantity, si.item_final_price
-        FROM sale_items si
-        WHERE si.sale_id = ?
-      `).all(sale.id);
+    db.all(query, queryParams, (err, sales) => {
+      if (err) {
+        console.error('Error exporting sales:', err);
+        return res.status(500).json({ error: 'Failed to export sales' });
+      }
       
-      sale.items = items.length;
-      return sale;
+      if (sales.length === 0) {
+        return res.status(404).json({ error: 'No sales found to export' });
+      }
+      
+      // Process each sale to get item counts
+      let processed = 0;
+      sales.forEach((sale, index) => {
+        db.all(`
+          SELECT COUNT(*) as itemCount
+          FROM sale_items
+          WHERE sale_id = ?
+        `, [sale.id], (err, result) => {
+          if (!err && result && result[0]) {
+            sales[index].items = result[0].itemCount;
+          } else {
+            sales[index].items = 0;
+          }
+          
+          processed++;
+          if (processed === sales.length) {
+            // All sales processed, create Excel file
+            finishExport();
+          }
+        });
+      });
+      
+      function finishExport() {
+        // Create a new workbook
+        const workbook = xlsx.utils.book_new();
+        const worksheet = xlsx.utils.json_to_sheet(sales);
+        
+        // Add the worksheet to the workbook
+        xlsx.utils.book_append_sheet(workbook, worksheet, 'Sales');
+        
+        // Create a buffer
+        const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+        
+        // Set headers
+        res.setHeader('Content-Disposition', 'attachment; filename=sales.xlsx');
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        
+        // Send the buffer
+        res.send(buffer);
+      }
+      
+      // If no sales to process
+      if (sales.length === 0) {
+        finishExport();
+      }
     });
-    
-    // Create a new workbook
-    const workbook = xlsx.utils.book_new();
-    const worksheet = xlsx.utils.json_to_sheet(salesWithItems);
-    
-    // Add the worksheet to the workbook
-    xlsx.utils.book_append_sheet(workbook, worksheet, 'Sales');
-    
-    // Create a buffer
-    const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-    
-    // Set headers
-    res.setHeader('Content-Disposition', 'attachment; filename=sales.xlsx');
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    
-    // Send the buffer
-    res.send(buffer);
   } catch (error) {
     console.error('Error exporting sales:', error);
     res.status(500).json({ error: 'Failed to export sales' });
@@ -872,6 +1199,7 @@ app.get('/api/export/sales', (req, res) => {
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
+  console.log(`Database path: ${dbPath}`);
 });
 
 module.exports = app;
