@@ -1,10 +1,11 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    --background: 220 33% 98%;
     --foreground: 222.2 84% 4.9%;
 
     --card: 0 0% 100%;
@@ -33,22 +34,6 @@
     --ring: 222.2 84% 4.9%;
 
     --radius: 0.5rem;
-
-    --sidebar-background: 0 0% 98%;
-
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
   .dark {
@@ -79,14 +64,6 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
   }
 }
 
@@ -94,8 +71,32 @@
   * {
     @apply border-border;
   }
-
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Custom styles for Kala Vastralya */
+.kala-card {
+  @apply bg-white rounded-lg border border-gray-200 overflow-hidden;
+}
+
+.kala-header {
+  @apply bg-kala-blue text-white font-medium px-4 py-2;
+}
+
+.kala-button {
+  @apply bg-kala-blue text-white px-4 py-2 rounded hover:bg-blue-900 transition-colors;
+}
+
+.kala-button-secondary {
+  @apply bg-gray-400 text-white px-4 py-2 rounded hover:bg-gray-500 transition-colors;
+}
+
+.kala-tag-bill {
+  @apply bg-green-100 text-green-800 text-xs px-2 py-1 rounded;
+}
+
+.kala-tag-estimate {
+  @apply bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded;
 }
