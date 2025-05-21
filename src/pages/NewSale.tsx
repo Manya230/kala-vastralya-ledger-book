@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -47,61 +47,64 @@ const NewSale = () => {
     }
   }, [finalAmount, totalAmount]);
   
+  // Handle product data success
+  const handleProductSuccess = useCallback((data: any) => {
+    if (!data) {
+      toast.error('Product not found');
+      return;
+    }
+    
+    if (data.quantity < quantity) {
+      toast.error(`Only ${data.quantity} items available in stock`);
+      return;
+    }
+    
+    // Check if the product is already in the cart
+    const existingItem = cartItems.find(item => item.product_id === data.id);
+    
+    if (existingItem) {
+      // Update existing item
+      const newCart = cartItems.map(item => {
+        if (item.product_id === data.id) {
+          const newQuantity = item.quantity + quantity;
+          if (newQuantity > data.quantity) {
+            toast.error(`Only ${data.quantity} items available in stock`);
+            return item;
+          }
+          return {
+            ...item,
+            quantity: newQuantity,
+            item_final_price: data.sale_price * newQuantity
+          };
+        }
+        return item;
+      });
+      
+      setCartItems(newCart);
+    } else {
+      // Add new item
+      setCartItems([...cartItems, {
+        product_id: data.id,
+        barcode: data.barcode,
+        category_name: data.category,
+        sale_price: data.sale_price,
+        quantity: quantity,
+        item_final_price: data.sale_price * quantity
+      }]);
+    }
+    
+    // Reset barcode and quantity
+    setBarcode('');
+    setQuantity(1);
+  }, [cartItems, quantity]);
+  
   // Product search query
   const { refetch: searchProduct } = useQuery({
     queryKey: ['product', barcode],
     queryFn: () => getProductByBarcodeApi(barcode),
     enabled: false,
-    onSuccess: (data) => {
-      if (!data) {
-        toast.error('Product not found');
-        return;
-      }
-      
-      if (data.quantity < quantity) {
-        toast.error(`Only ${data.quantity} items available in stock`);
-        return;
-      }
-      
-      // Check if the product is already in the cart
-      const existingItem = cartItems.find(item => item.product_id === data.id);
-      
-      if (existingItem) {
-        // Update existing item
-        const newCart = cartItems.map(item => {
-          if (item.product_id === data.id) {
-            const newQuantity = item.quantity + quantity;
-            if (newQuantity > data.quantity) {
-              toast.error(`Only ${data.quantity} items available in stock`);
-              return item;
-            }
-            return {
-              ...item,
-              quantity: newQuantity,
-              item_final_price: data.sale_price * newQuantity
-            };
-          }
-          return item;
-        });
-        
-        setCartItems(newCart);
-      } else {
-        // Add new item
-        setCartItems([...cartItems, {
-          product_id: data.id,
-          barcode: data.barcode,
-          category_name: data.category,
-          sale_price: data.sale_price,
-          quantity: quantity,
-          item_final_price: data.sale_price * quantity
-        }]);
-      }
-      
-      // Reset barcode and quantity
-      setBarcode('');
-      setQuantity(1);
-    },
-    onError: (error) => {
+    onSuccess: handleProductSuccess,
+    onError: (error: any) => {
       console.error('Error searching product:', error);
       toast.error('Failed to search product');
     }
