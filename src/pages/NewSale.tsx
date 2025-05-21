@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { format } from 'date-fns';
@@ -103,10 +102,12 @@ const NewSale = () => {
     queryKey: ['product', barcode],
     queryFn: () => getProductByBarcodeApi(barcode),
     enabled: false,
-    onSuccess: handleProductSuccess,
-    onError: (error: any) => {
-      console.error('Error searching product:', error);
-      toast.error('Failed to search product');
+    meta: {
+      onSuccess: handleProductSuccess,
+      onError: (error: any) => {
+        console.error('Error searching product:', error);
+        toast.error('Failed to search product');
+      }
     }
   });
   

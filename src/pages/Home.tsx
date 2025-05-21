@@ -1,8 +1,8 @@
-
 import { Link } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import Card from '@/components/Card';
-import { ShoppingCart, Inventory, FileText } from 'lucide-react';
+import { ShoppingCart, FileText } from 'lucide-react';
+import { Inventory } from '@/components/icons/KalaIcons';
 
 const Home = () => {
   return (

@@ -1,6 +1,6 @@
-
 import { Link, useLocation } from "react-router-dom";
-import { Home, ShoppingCart, Inventory, FileText } from "lucide-react";
+import { Home, ShoppingCart, FileText } from "lucide-react";
+import { Inventory } from "@/components/icons/KalaIcons";
 
 interface LayoutProps {
   children: React.ReactNode;
