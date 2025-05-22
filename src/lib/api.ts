@@ -1,4 +1,3 @@
-
 import axios from 'axios';
 
 // Change the base URL to point to the local development server
@@ -10,6 +9,15 @@ const api = axios.create({
     'Content-Type': 'application/json',
   }
 });
+
+// Add error handling to the API client
+api.interceptors.response.use(
+  response => response,
+  error => {
+    console.error('API Error:', error);
+    return Promise.reject(error);
+  }
+);
 
 // Category API
 export const getCategoriesApi = async () => {
@@ -40,8 +48,13 @@ export const getProductsApi = async () => {
 };
 
 export const getProductByBarcodeApi = async (barcode: string) => {
-  const response = await api.get(`/products/${barcode}`);
-  return response.data;
+  try {
+    const response = await api.get(`/products/${barcode}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching product by barcode:', error);
+    return null;
+  }
 };
 
 export const createProductApi = async (product: {

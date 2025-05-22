@@ -1,6 +1,6 @@
+
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { format } from 'date-fns';
 import { toast } from 'sonner';
 import Layout from '@/components/Layout';
 import Card from '@/components/Card';
@@ -48,6 +48,8 @@ const NewSale = () => {
   
   // Handle product data success
   const handleProductSuccess = useCallback((data: any) => {
+    console.log("Product data received:", data);
+    
     if (!data) {
       toast.error('Product not found');
       return;
@@ -102,14 +104,30 @@ const NewSale = () => {
     queryKey: ['product', barcode],
     queryFn: () => getProductByBarcodeApi(barcode),
     enabled: false,
-    meta: {
-      onSuccess: handleProductSuccess,
-      onError: (error: any) => {
-        console.error('Error searching product:', error);
-        toast.error('Failed to search product');
-      }
+    onSuccess: handleProductSuccess,
+    onError: (error: any) => {
+      console.error('Error searching product:', error);
+      toast.error('Failed to search product');
     }
   });
+  
+  // Handle mobile number input
+  const handleMobileNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    // Only allow numbers and limit to 10 digits
+    if (/^\d*$/.test(value) && value.length <= 10) {
+      setMobileNumber(value);
+    }
+  };
+  
+  // Handle barcode input
+  const handleBarcodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    // Only allow numbers and limit to 8 digits
+    if (/^\d*$/.test(value) && value.length <= 8) {
+      setBarcode(value);
+    }
+  };
   
   // Create sale mutation
   const createSaleMutation = useMutation({
@@ -139,6 +157,7 @@ const NewSale = () => {
       return;
     }
     
+    console.log("Searching for product with barcode:", barcode);
     searchProduct();
   };
   
@@ -228,9 +247,10 @@ const NewSale = () => {
                 </label>
                 <Input
                   id="mobileNumber"
-                  placeholder="Enter mobile number"
+                  placeholder="Enter mobile number (10 digits max)"
                   value={mobileNumber}
-                  onChange={(e) => setMobileNumber(e.target.value)}
+                  onChange={handleMobileNumberChange}
+                  maxLength={10}
                 />
               </div>
             </div>
@@ -246,10 +266,11 @@ const NewSale = () => {
                     <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
                     <Input
                       id="barcode"
-                      placeholder="Scan or type barcode"
+                      placeholder="Scan or type barcode (8 digits max)"
                       className="pl-8"
                       value={barcode}
-                      onChange={(e) => setBarcode(e.target.value)}
+                      onChange={handleBarcodeChange}
+                      maxLength={8}
                     />
                   </div>
                 </div>
