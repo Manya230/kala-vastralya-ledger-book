@@ -54,7 +54,7 @@ export const getProductByBarcodeApi = async (barcode: string) => {
   }
   
   try {
-    const response = await api.get(`/products/${barcode}`);
+    const response = await api.get(`/products/barcode/${barcode}`);
     return response.data;
   } catch (error) {
     console.error('Error fetching product by barcode:', error);
@@ -89,16 +89,19 @@ export const updateProductApi = async (id: number, product: {
   cost_price?: number;
   sale_price?: number;
 }) => {
+  // Use the correct endpoint structure: /products/id
   const response = await api.patch(`/products/${id}`, product);
   return response.data;
 };
 
 export const deleteProductApi = async (id: number) => {
+  // Use the correct endpoint structure: /products/id
   const response = await api.delete(`/products/${id}`);
   return response.data;
 };
 
 export const updateProductQuantityApi = async (id: number, quantity: number) => {
+  // Use the correct endpoint structure: /products/id/quantity
   const response = await api.patch(`/products/${id}/quantity`, { quantity });
   return response.data;
 };

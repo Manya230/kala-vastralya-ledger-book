@@ -110,9 +110,11 @@ const NewSale = () => {
     queryKey: ['product', barcode],
     queryFn: () => getProductByBarcodeApi(barcode),
     enabled: false,
-    onSuccess: handleProductSuccess,
-    onError: () => {
-      toast.error('Product not found');
+    meta: {
+      onSuccess: handleProductSuccess,
+      onError: () => {
+        toast.error('Product not found');
+      }
     }
   });
   
@@ -178,8 +180,14 @@ const NewSale = () => {
     try {
       const result = await searchProduct();
       console.log("Search result:", result.data);
+      if (result.data) {
+        handleProductSuccess(result.data);
+      } else {
+        toast.error('Product not found');
+      }
     } catch (error) {
       console.error("Error searching for product:", error);
+      toast.error('Product not found');
     }
   };
   

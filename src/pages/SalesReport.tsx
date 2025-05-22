@@ -87,8 +87,12 @@ const SalesReport = () => {
     queryKey: ['sale', selectedSaleId],
     queryFn: () => getSaleByIdApi(selectedSaleId!),
     enabled: !!selectedSaleId,
-    onSuccess: (data) => {
-      setEditedItems(data.items);
+    meta: {
+      onSettled: (data: SaleDetail | undefined) => {
+        if (data?.items) {
+          setEditedItems(data.items);
+        }
+      }
     }
   });
   
@@ -488,50 +492,58 @@ const SalesReport = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {editedItems.map((item, index) => (
-                      <tr key={item.id} className="border-t">
-                        <td className="px-4 py-2">
-                          <div className="font-medium">{item.category_name}</div>
-                          <div className="text-xs text-gray-500">{item.barcode}</div>
-                        </td>
-                        <td className="px-4 py-2 text-center">
-                          {isEditing ? (
-                            <div className="flex items-center justify-center space-x-1">
-                              <button
-                                type="button"
-                                className="w-6 h-6 flex items-center justify-center rounded bg-gray-200"
-                                onClick={() => handleUpdateItemQuantity(index, item.quantity - 1)}
-                              >
-                                <Minus size={12} />
-                              </button>
-                              <span className="text-center w-6">{item.quantity}</span>
-                              <button
-                                type="button"
-                                className="w-6 h-6 flex items-center justify-center rounded bg-gray-200"
-                                onClick={() => handleUpdateItemQuantity(index, item.quantity + 1)}
-                              >
-                                <Plus size={12} />
-                              </button>
-                            </div>
-                          ) : (
-                            item.quantity
-                          )}
-                        </td>
-                        <td className="px-4 py-2 text-right">₹{item.sale_price.toFixed(2)}</td>
-                        <td className="px-4 py-2 text-right">₹{item.item_final_price.toFixed(2)}</td>
-                        {isEditing && (
+                    {editedItems && editedItems.length > 0 ? (
+                      editedItems.map((item, index) => (
+                        <tr key={item.id} className="border-t">
                           <td className="px-4 py-2">
-                            <button
-                              type="button"
-                              className="p-1 text-gray-500 hover:text-red-500"
-                              onClick={() => handleRemoveItem(index)}
-                            >
-                              <X size={16} />
-                            </button>
+                            <div className="font-medium">{item.category_name}</div>
+                            <div className="text-xs text-gray-500">{item.barcode}</div>
                           </td>
-                        )}
+                          <td className="px-4 py-2 text-center">
+                            {isEditing ? (
+                              <div className="flex items-center justify-center space-x-1">
+                                <button
+                                  type="button"
+                                  className="w-6 h-6 flex items-center justify-center rounded bg-gray-200"
+                                  onClick={() => handleUpdateItemQuantity(index, item.quantity - 1)}
+                                >
+                                  <Minus size={12} />
+                                </button>
+                                <span className="text-center w-6">{item.quantity}</span>
+                                <button
+                                  type="button"
+                                  className="w-6 h-6 flex items-center justify-center rounded bg-gray-200"
+                                  onClick={() => handleUpdateItemQuantity(index, item.quantity + 1)}
+                                >
+                                  <Plus size={12} />
+                                </button>
+                              </div>
+                            ) : (
+                              item.quantity
+                            )}
+                          </td>
+                          <td className="px-4 py-2 text-right">₹{item.sale_price.toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">₹{item.item_final_price.toFixed(2)}</td>
+                          {isEditing && (
+                            <td className="px-4 py-2">
+                              <button
+                                type="button"
+                                className="p-1 text-gray-500 hover:text-red-500"
+                                onClick={() => handleRemoveItem(index)}
+                              >
+                                <X size={16} />
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={isEditing ? 5 : 4} className="px-4 py-4 text-center">
+                          No items found
+                        </td>
                       </tr>
-                    ))}
+                    )}
                   </tbody>
                 </table>
               </div>
