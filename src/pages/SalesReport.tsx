@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
@@ -497,7 +496,6 @@ const SalesReport = () => {
                         <tr key={item.id} className="border-t">
                           <td className="px-4 py-2">
                             <div className="font-medium">{item.category_name}</div>
-                            <div className="text-xs text-gray-500">{item.barcode}</div>
                           </td>
                           <td className="px-4 py-2 text-center">
                             {isEditing ? (

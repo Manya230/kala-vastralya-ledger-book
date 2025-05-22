@@ -1,4 +1,3 @@
-
 const express = require('express');
 const cors = require('cors');
 const sqlite3 = require('sqlite3').verbose();
@@ -332,7 +331,7 @@ app.get('/api/products', (req, res) => {
 });
 
 // Get product by barcode
-app.get('/api/products/:barcode', (req, res) => {
+app.get('/api/products/barcode/:barcode', (req, res) => {
   const { barcode } = req.params;
   
   try {
@@ -435,6 +434,31 @@ app.patch('/api/products/:id/quantity', (req, res) => {
   }
 });
 
+// Update product details
+app.patch('/api/products/:id', (req, res) => {
+  const { id } = req.params;
+  const { category_id, manufacturer_id, quantity, cost_price, sale_price } = req.body;
+
+  if (!category_id || !manufacturer_id || quantity == null || cost_price == null || sale_price == null) {
+    return res.status(400).json({ error: 'All fields are required' });
+  }
+
+  db.run(
+    `UPDATE products SET category_id = ?, manufacturer_id = ?, quantity = ?, cost_price = ?, sale_price = ? WHERE id = ?`,
+    [category_id, manufacturer_id, quantity, cost_price, sale_price, id],
+    function (err) {
+      if (err) {
+        console.error('Error updating product:', err);
+        return res.status(500).json({ error: 'Failed to update product' });
+      }
+      if (this.changes === 0) {
+        return res.status(404).json({ error: 'Product not found' });
+      }
+      res.json({ id: parseInt(id), category_id, manufacturer_id, quantity, cost_price, sale_price });
+    }
+  );
+});
+
 // --------------------------------
 // Sales Routes
 // --------------------------------
@@ -513,6 +537,7 @@ app.post('/api/sales', (req, res) => {
           let completed = 0;
           let errors = false;
           
+          console.log('Inserting sale items:', items, 'for saleId:', saleId);
           // Insert sale items and update inventory
           items.forEach((item, index) => {
             // Insert sale item
@@ -552,11 +577,36 @@ app.post('/api/sales', (req, res) => {
                     db.run('ROLLBACK');
                     return res.status(500).json({ error: 'Failed to create sale' });
                   } else {
-                    db.run('COMMIT');
-                    return res.status(201).json({
-                      id: saleId,
-                      number: formattedNumber,
-                      date: date
+                    db.run('COMMIT', (err) => {
+                      if (err) {
+                        console.error('Error committing transaction:', err);
+                        return res.status(500).json({ error: 'Failed to create sale' });
+                      }
+                      // Fetch the full sale record
+                      db.get(`
+                        SELECT 
+                          s.id, s.type, s.number, s.customer_name, s.mobile, 
+                          s.payment_mode, s.remarks, s.date, s.total_amount, s.total_discount, s.final_amount
+                        FROM sales s
+                        WHERE s.id = ?
+                      `, [saleId], (err, sale) => {
+                        if (err || !sale) {
+                          return res.status(201).json({ id: saleId, number: formattedNumber, date: date });
+                        }
+                        // Fetch sale items
+                        db.all(`
+                          SELECT 
+                            si.id, si.product_id, si.category_name, si.sale_price, 
+                            si.quantity, si.item_final_price,
+                            p.barcode
+                          FROM sale_items si
+                          LEFT JOIN products p ON si.product_id = p.id
+                          WHERE si.sale_id = ?
+                        `, [saleId], (err, items) => {
+                          sale.items = items || [];
+                          res.status(201).json(sale);
+                        });
+                      });
                     });
                   }
                 }

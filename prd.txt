@@ -1,0 +1,223 @@
+# ✅ **Product Requirements: Kala Vastralya – Retail Management System**
+
+## 🏬 **Overview**
+
+Kala Vastralya is a local clothing retail store application to manage inventory, record sales, generate bills and estimates, and produce detailed reports. The system must run fully offline on a local computer with all data stored in a **SQLite** database.
+
+---
+
+## 🎯 **Core Features**
+
+### 1. **Inventory Management**
+
+* Products have:
+
+  * 8-digit barcode (scanned or typed)
+  * Category (dropdown + add-new)
+  * Manufacturer (dropdown + add-new)
+  * Quantity
+  * Cost Price
+  * Sale Price
+* Inventory is updated when:
+
+  * Products are added
+  * A sale or estimate is made (quantity deducted)
+  * A sale is edited or items are returned (quantity updated accordingly)
+
+---
+
+### 2. **Sales & Estimates**
+
+* Record a new **sale** or **estimate**:
+
+  * **Customer name and mobile number**: optional
+
+    * If left blank, default to `"Walk In Customer"` as the name.
+  * Add items by barcode
+  * Cart table format:
+
+    ```
+    Item        Quantity     Rate     Total
+                (items listed here)
+                              Final Price:     ₹200
+                              Discount:        ₹50   (editable, default 0)
+                              To Pay:          ₹150  (editable)
+    ```
+
+    * **Discount and To Pay** are **bi-directionally dynamic**:
+
+      * Changing Discount → updates To Pay
+      * Changing To Pay → updates Discount
+* **Payment Mode**:
+
+  * Optional (`cash` or `upi`)
+  * No default selection
+* **Remarks**:
+
+  * Optional
+  * **Not shown** in printable bill/estimate
+  * **Only visible** in sales report detailed view
+* Submit actions:
+
+  * **Create Bill**:
+
+    * Generates `BILL-XXXX` number
+    * Saves to database
+    * Deducts inventory
+    * Printable format with `"Kala Vastralya"` and full details
+  * **Create Estimate**:
+
+    * Generates `EST-XXXX` number
+    * Saves to database
+    * Deducts inventory
+    * Printable format titled **"Estimate/Challan"** (without `"Kala Vastralya"` name)
+
+---
+
+### 3. **Sales Report**
+
+* View all sales & estimates
+* Default view shows:
+
+  ```
+  Date | Bill/Estimate Number | Type | Customer Name (Mobile below) | Amount
+  ```
+* Filters:
+
+  * Daily view by exact calendar date
+  * Range view (from–to)
+  * Type filter: bills only, estimates only, or both
+* **Search**:
+
+  * By **customer name** or **mobile number**
+  * Searches **across all records**, regardless of date filter
+* Sort by bill/estimate number (descending)
+* Click to view full details
+
+  * Shows:
+
+    * Date, number, type
+    * All items
+    * Total, discount, final paid
+    * Remarks
+    * **Payment mode only if it was selected**
+* **Edit Mode**:
+
+  * Adjust item quantities
+  * Remove returned items
+  * Inventory updates automatically
+  * Totals recalculate live
+* **Export to Excel**:
+
+  * Exports the **currently filtered** records (not full product list)
+  * Triggers file download directly
+
+---
+
+## 📅 **Date & Time Requirements**
+
+* All date and time must be stored and shown in **Indian Standard Time (IST, GMT +5:30)**
+* Use `Asia/Kolkata` timezone consistently
+* Sales filtering must match the selected date **exactly**
+* Re-selecting the same date must not reset filters
+
+---
+
+## 📦 **Excel Integration**
+
+* Import products from Excel
+
+  * Columns: barcode, category, manufacturer, quantity, cost\_price, sale\_price
+* Export:
+
+  * Products (via inventory page)
+  * Filtered sales/estimates (via sales report page)
+
+---
+
+## 🛠️ **Tech Stack**
+
+* **Frontend**: React + TypeScript + Vite + Tailwind CSS
+
+  * React Router
+  * React Query (`@tanstack/react-query`)
+  * Sonner (toasts)
+  * Context API for state
+* **Backend**: Node.js + Express.js
+
+  * SQLite for database
+  * Multer for file uploads
+  * XLSX for Excel parsing/generation
+  * Sale dates stored in IST
+* **Icons/UI**: Lucide, Radix UI
+
+---
+
+## 🧾 **Database Tables (Revised)**
+
+### `products`
+
+* `id`: INTEGER (PK)
+* `barcode`: TEXT (unique, 8-digit)
+* `category_id`: INTEGER
+* `manufacturer_id`: INTEGER
+* `quantity`: INTEGER
+* `cost_price`: REAL
+* `sale_price`: REAL
+
+### `categories`
+
+* `id`: INTEGER (PK)
+* `name`: TEXT (unique)
+
+### `manufacturers`
+
+* `id`: INTEGER (PK)
+* `name`: TEXT (unique)
+
+### `sales`
+
+* `id`: INTEGER (PK)
+* `type`: TEXT ("bill" or "estimate")
+* `number`: TEXT ("BILL-0001", "EST-0001", etc.)
+* `customer_name`: TEXT
+* `mobile`: TEXT
+* `payment_mode`: TEXT (nullable; only "cash" or "upi" if selected)
+* `remarks`: TEXT (nullable)
+* `date`: TEXT (stored in IST format)
+* `total_amount`: REAL
+* `total_discount`: REAL (optional)
+* `final_amount`: REAL (after discount)
+
+### `sale_items`
+
+* `id`: INTEGER
+* `sale_id`: INTEGER (FK)
+* `product_id`: INTEGER (FK)
+* `category_name`: TEXT
+* `sale_price`: REAL
+* `quantity`: INTEGER
+* `item_final_price`: REAL
+
+---
+
+## 🧪 Testing & Validation
+
+* App must run fully offline
+* All critical errors must be logged
+* Toasts confirm:
+
+  * Successful sales
+  * Inventory updates
+  * Excel import/export
+* Discounts and payments work as per UI behavior
+* All filters and searches perform accurately
+
+---
+
+## 📋 Notes
+
+* Bill/estimate print view and sales detail view must **follow the cart layout exactly**
+* If **discount is 0**, do **not show the discount section** in the print or detail view
+* UI design must remain clean and responsive for non-technical users
+

@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -417,8 +416,8 @@ const NewSale = () => {
                             </button>
                           </div>
                         </td>
-                        <td className="px-4 py-2 text-right">₹{item.sale_price.toFixed(2)}</td>
-                        <td className="px-4 py-2 text-right">₹{item.item_final_price.toFixed(2)}</td>
+                        <td className="px-4 py-2 text-right">₹{(item.sale_price ?? 0).toFixed(2)}</td>
+                        <td className="px-4 py-2 text-right">₹{(item.item_final_price ?? 0).toFixed(2)}</td>
                         <td className="px-2 py-2">
                           <button
                             type="button"
@@ -562,8 +561,8 @@ const NewSale = () => {
                           <div className="text-xs text-gray-500">{item.barcode}</div>
                         </td>
                         <td className="px-4 py-2 text-center">{item.quantity}</td>
-                        <td className="px-4 py-2 text-right">₹{item.sale_price.toFixed(2)}</td>
-                        <td className="px-4 py-2 text-right">₹{item.item_final_price.toFixed(2)}</td>
+                        <td className="px-4 py-2 text-right">₹{(item.sale_price ?? 0).toFixed(2)}</td>
+                        <td className="px-4 py-2 text-right">₹{(item.item_final_price ?? 0).toFixed(2)}</td>
                       </tr>
                     ))}
                   </tbody>
