@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import Card from '@/components/Card';
 import { Input } from '@/components/ui/input';
@@ -9,10 +10,10 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-import { Barcode, Plus, Minus, X } from 'lucide-react';
+import { Barcode, Plus, Minus, X, Printer } from 'lucide-react';
 import { getProductByBarcodeApi, createSaleApi } from '@/lib/api';
-import { useNavigate } from 'react-router-dom';
 import { CartItem } from '@/contexts/AppContext';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 const NewSale = () => {
   const navigate = useNavigate();
@@ -31,6 +32,11 @@ const NewSale = () => {
   const [discount, setDiscount] = useState(0);
   const [finalAmount, setFinalAmount] = useState(0);
   
+  // Receipt states
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [receiptData, setReceiptData] = useState<any>(null);
+  const [receiptType, setReceiptType] = useState<'bill' | 'estimate'>('bill');
+  
   // Effect to recalculate totals when cart changes
   useEffect(() => {
     const total = cartItems.reduce((sum, item) => sum + item.item_final_price, 0);
@@ -42,7 +48,7 @@ const NewSale = () => {
   useEffect(() => {
     const calculatedDiscount = totalAmount - finalAmount;
     if (calculatedDiscount !== discount) {
-      setDiscount(calculatedDiscount);
+      setDiscount(calculatedDiscount >= 0 ? calculatedDiscount : 0);
     }
   }, [finalAmount, totalAmount]);
   
@@ -104,12 +110,9 @@ const NewSale = () => {
     queryKey: ['product', barcode],
     queryFn: () => getProductByBarcodeApi(barcode),
     enabled: false,
-    meta: {
-      onSuccess: handleProductSuccess
-    },
-    onError: (error: any) => {
-      console.error('Error searching product:', error);
-      toast.error('Failed to search product');
+    onSuccess: handleProductSuccess,
+    onError: () => {
+      toast.error('Product not found');
     }
   });
   
@@ -136,8 +139,20 @@ const NewSale = () => {
     mutationFn: createSaleApi,
     onSuccess: (data) => {
       toast.success(`${data.type === 'bill' ? 'Bill' : 'Estimate'} ${data.number} created successfully`);
-      // Navigate to the sales report
-      navigate('/sales-report');
+      
+      // Show receipt before navigating
+      setReceiptData({
+        ...data,
+        customer_name: customerName,
+        mobile: mobileNumber,
+        payment_mode: paymentMode,
+        items: cartItems.map(item => ({
+          ...item,
+          barcode: item.barcode
+        }))
+      });
+      setReceiptType(data.type);
+      setShowReceipt(true);
     },
     onError: (error) => {
       console.error('Error creating sale:', error);
@@ -163,11 +178,6 @@ const NewSale = () => {
     try {
       const result = await searchProduct();
       console.log("Search result:", result.data);
-      
-      // Manually call the success handler because Tanstack Query's meta.onSuccess isn't working as expected
-      if (result.data) {
-        handleProductSuccess(result.data);
-      }
     } catch (error) {
       console.error("Error searching for product:", error);
     }
@@ -231,6 +241,17 @@ const NewSale = () => {
     setFinalAmount(value);
     const newDiscount = totalAmount - value;
     setDiscount(newDiscount >= 0 ? newDiscount : 0);
+  };
+  
+  // Handle print receipt
+  const handlePrint = () => {
+    window.print();
+  };
+  
+  // Handle close receipt
+  const handleCloseReceipt = () => {
+    setShowReceipt(false);
+    navigate('/sales-report');
   };
   
   return (
@@ -460,6 +481,119 @@ const NewSale = () => {
           </div>
         </div>
       </Card>
+      
+      {/* Receipt Dialog */}
+      <Dialog open={showReceipt} onOpenChange={setShowReceipt}>
+        <DialogContent className="max-w-3xl print:shadow-none print:border-none print:max-w-full">
+          <DialogHeader className="relative print:mb-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute right-0 top-0 print:hidden"
+              onClick={handleCloseReceipt}
+            >
+              <X size={16} />
+            </Button>
+            <DialogTitle className="text-center">
+              {receiptType === 'bill' && <div className="text-xl font-bold">KALA VASTRALYA</div>}
+              <div>
+                {receiptType === 'bill' ? 'Bill' : 'Estimate'} Details
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+          
+          {!receiptData ? (
+            <div className="py-8 text-center">Loading...</div>
+          ) : (
+            <div>
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <p className="text-sm text-gray-500">
+                    {receiptType === 'bill' ? 'Bill' : 'Estimate'} Number
+                  </p>
+                  <p className="font-medium">{receiptData.number}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Date</p>
+                  <p className="font-medium">{new Date(receiptData.date || Date.now()).toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Customer</p>
+                  <p className="font-medium">{receiptData.customer_name}</p>
+                </div>
+                {receiptData.mobile && (
+                  <div>
+                    <p className="text-sm text-gray-500">Mobile</p>
+                    <p className="font-medium">{receiptData.mobile}</p>
+                  </div>
+                )}
+                {receiptData.payment_mode && (
+                  <div>
+                    <p className="text-sm text-gray-500">Payment Mode</p>
+                    <p className="font-medium capitalize">{receiptData.payment_mode}</p>
+                  </div>
+                )}
+              </div>
+              
+              <p className="font-medium mb-2">Items:</p>
+              <div className="border rounded overflow-hidden mb-4">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left">Item</th>
+                      <th className="px-4 py-2 text-center">Qty</th>
+                      <th className="px-4 py-2 text-right">Rate</th>
+                      <th className="px-4 py-2 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {receiptData.items.map((item: any, index: number) => (
+                      <tr key={index} className="border-t">
+                        <td className="px-4 py-2">
+                          <div className="font-medium">{item.category_name}</div>
+                          <div className="text-xs text-gray-500">{item.barcode}</div>
+                        </td>
+                        <td className="px-4 py-2 text-center">{item.quantity}</td>
+                        <td className="px-4 py-2 text-right">₹{item.sale_price.toFixed(2)}</td>
+                        <td className="px-4 py-2 text-right">₹{item.item_final_price.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              <div className="bg-gray-50 p-4 rounded">
+                <div className="flex justify-between mb-1">
+                  <span>Total:</span>
+                  <span>₹{receiptData.total_amount.toFixed(2)}</span>
+                </div>
+                
+                {receiptData.total_discount > 0 && (
+                  <div className="flex justify-between mb-1">
+                    <span>Discount:</span>
+                    <span>₹{receiptData.total_discount.toFixed(2)}</span>
+                  </div>
+                )}
+                
+                <div className="flex justify-between font-medium">
+                  <span>Final Amount:</span>
+                  <span>₹{receiptData.final_amount.toFixed(2)}</span>
+                </div>
+              </div>
+              
+              <div className="mt-6 flex justify-end gap-2 print:hidden">
+                <Button onClick={handleCloseReceipt} variant="outline">
+                  Close
+                </Button>
+                <Button onClick={handlePrint} className="flex items-center gap-1">
+                  <Printer size={16} />
+                  Print
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 };

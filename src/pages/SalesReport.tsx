@@ -1,6 +1,6 @@
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import Layout from '@/components/Layout';
@@ -9,8 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { getSalesApi, getSaleByIdApi, exportSalesApi } from '@/lib/api';
-import { Search, Calendar, FileDown, X } from 'lucide-react';
+import { getSalesApi, getSaleByIdApi, exportSalesApi, updateSaleApi, updateProductQuantityApi } from '@/lib/api';
+import { Search, Calendar, FileDown, X, Plus, Minus } from 'lucide-react';
 
 interface Sale {
   id: number;
@@ -25,20 +25,24 @@ interface Sale {
   final_amount: number;
 }
 
+interface SaleItem {
+  id: number;
+  product_id: number;
+  barcode: string;
+  category_name: string;
+  sale_price: number;
+  quantity: number;
+  item_final_price: number;
+}
+
 interface SaleDetail extends Sale {
   remarks: string | null;
-  items: Array<{
-    id: number;
-    product_id: number;
-    barcode: string;
-    category_name: string;
-    sale_price: number;
-    quantity: number;
-    item_final_price: number;
-  }>;
+  items: SaleItem[];
 }
 
 const SalesReport = () => {
+  const queryClient = useQueryClient();
+
   // Filter states
   const [dateFilter, setDateFilter] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [startDate, setStartDate] = useState('');
@@ -50,6 +54,8 @@ const SalesReport = () => {
   // Details dialog state
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [selectedSaleId, setSelectedSaleId] = useState<number | null>(null);
+  const [editedItems, setEditedItems] = useState<SaleItem[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
   
   // Fetch sales
   const { data: sales = [], isLoading, refetch } = useQuery({
@@ -80,13 +86,41 @@ const SalesReport = () => {
   const { data: saleDetail, isLoading: isLoadingDetails } = useQuery({
     queryKey: ['sale', selectedSaleId],
     queryFn: () => getSaleByIdApi(selectedSaleId!),
-    enabled: !!selectedSaleId
+    enabled: !!selectedSaleId,
+    onSuccess: (data) => {
+      setEditedItems(data.items);
+    }
+  });
+  
+  // Update sale mutation
+  const updateSaleMutation = useMutation({
+    mutationFn: async ({ id, updatedSale }: { id: number, updatedSale: any }) => {
+      return updateSaleApi(id, updatedSale);
+    },
+    onSuccess: () => {
+      toast.success('Sale updated successfully');
+      queryClient.invalidateQueries({ queryKey: ['sale', selectedSaleId] });
+      queryClient.invalidateQueries({ queryKey: ['sales'] });
+      setIsEditing(false);
+    },
+    onError: (error) => {
+      console.error('Error updating sale:', error);
+      toast.error('Failed to update sale');
+    }
+  });
+  
+  // Update quantity mutation
+  const updateQuantityMutation = useMutation({
+    mutationFn: ({ id, quantity }: { id: number, quantity: number }) => {
+      return updateProductQuantityApi(id, quantity);
+    }
   });
   
   // Handle view sale details
   const handleViewDetails = (id: number) => {
     setSelectedSaleId(id);
     setIsDetailsOpen(true);
+    setIsEditing(false);
   };
   
   // Handle export
@@ -116,6 +150,104 @@ const SalesReport = () => {
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return format(date, 'dd/MM/yyyy hh:mm a');
+  };
+
+  // Calculate totals
+  const getTotalAmount = () => {
+    return sales
+      .reduce((sum: number, sale: Sale) => sum + sale.final_amount, 0)
+      .toFixed(2);
+  };
+
+  // Handle update item quantity
+  const handleUpdateItemQuantity = (index: number, newQuantity: number) => {
+    if (!isEditing || newQuantity < 0) return;
+
+    const updatedItems = [...editedItems];
+    const item = updatedItems[index];
+    const currentQuantity = item.quantity;
+    const quantityDiff = newQuantity - currentQuantity;
+    
+    // Update the item quantity
+    updatedItems[index] = {
+      ...item,
+      quantity: newQuantity,
+      item_final_price: item.sale_price * newQuantity
+    };
+    
+    setEditedItems(updatedItems);
+  };
+
+  // Handle remove item
+  const handleRemoveItem = (index: number) => {
+    if (!isEditing) return;
+    
+    const updatedItems = [...editedItems];
+    updatedItems.splice(index, 1);
+    setEditedItems(updatedItems);
+  };
+
+  // Calculate totals for edited items
+  const calculateEditedTotals = () => {
+    const total = editedItems.reduce((sum, item) => sum + item.item_final_price, 0);
+    const discount = saleDetail ? saleDetail.total_discount : 0;
+    const final = total - discount;
+    
+    return { total, discount, final };
+  };
+
+  // Handle save changes
+  const handleSaveChanges = async () => {
+    if (!saleDetail || !selectedSaleId) return;
+    
+    const { total, discount, final } = calculateEditedTotals();
+    
+    // Prepare updated item quantities for inventory
+    const originalItems = saleDetail.items;
+    const quantityUpdates: { productId: number, diff: number }[] = [];
+    
+    // Find items with changed quantities
+    editedItems.forEach(editedItem => {
+      const originalItem = originalItems.find(oi => oi.product_id === editedItem.product_id);
+      if (originalItem) {
+        const diff = originalItem.quantity - editedItem.quantity;
+        if (diff !== 0) {
+          quantityUpdates.push({ productId: editedItem.product_id, diff });
+        }
+      }
+    });
+    
+    // Find removed items that need to be returned to inventory
+    originalItems.forEach(originalItem => {
+      const stillExists = editedItems.some(ei => ei.product_id === originalItem.product_id);
+      if (!stillExists) {
+        quantityUpdates.push({ productId: originalItem.product_id, diff: originalItem.quantity });
+      }
+    });
+    
+    // Update the sale
+    await updateSaleMutation.mutateAsync({
+      id: selectedSaleId,
+      updatedSale: {
+        total_amount: total,
+        total_discount: discount,
+        final_amount: final,
+        items: editedItems
+      }
+    });
+    
+    // Update inventory quantities
+    for (const update of quantityUpdates) {
+      try {
+        await updateQuantityMutation.mutateAsync({
+          id: update.productId,
+          quantity: update.diff
+        });
+      } catch (error) {
+        console.error(`Failed to update inventory for product ${update.productId}:`, error);
+        toast.error(`Failed to update inventory for one of the products`);
+      }
+    }
   };
   
   return (
@@ -179,11 +311,22 @@ const SalesReport = () => {
         </div>
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
-          <TabsList>
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="bill">Bills</TabsTrigger>
-            <TabsTrigger value="estimate">Estimates</TabsTrigger>
-          </TabsList>
+          <div className="flex justify-between items-center">
+            <TabsList>
+              <TabsTrigger value="all">All</TabsTrigger>
+              <TabsTrigger value="bill">Bills</TabsTrigger>
+              <TabsTrigger value="estimate">Estimates</TabsTrigger>
+            </TabsList>
+            
+            <div className="text-sm">
+              <span className="mr-4">
+                {sales.length} transaction{sales.length !== 1 ? 's' : ''}
+              </span>
+              <span className="font-medium">
+                Total: ₹{getTotalAmount()}
+              </span>
+            </div>
+          </div>
           
           <TabsContent value={activeTab} className="pt-4">
             <div className="border rounded overflow-hidden">
@@ -247,20 +390,6 @@ const SalesReport = () => {
                   )}
                 </tbody>
               </table>
-              
-              <div className="bg-gray-50 px-4 py-3 border-t">
-                <div className="flex justify-between items-center">
-                  <span>
-                    {sales.length} transaction{sales.length !== 1 ? 's' : ''}
-                  </span>
-                  <span>
-                    Total: ₹
-                    {sales
-                      .reduce((sum: number, sale: Sale) => sum + sale.final_amount, 0)
-                      .toFixed(2)}
-                  </span>
-                </div>
-              </div>
             </div>
           </TabsContent>
         </Tabs>
@@ -329,7 +458,24 @@ const SalesReport = () => {
                 </div>
               )}
               
-              <p className="font-medium mb-2">Items:</p>
+              <div className="flex justify-between items-center mb-2">
+                <p className="font-medium">Items:</p>
+                {!isEditing ? (
+                  <Button onClick={() => setIsEditing(true)} variant="outline" size="sm">
+                    Edit Items
+                  </Button>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button onClick={() => setIsEditing(false)} variant="outline" size="sm">
+                      Cancel
+                    </Button>
+                    <Button onClick={handleSaveChanges} size="sm">
+                      Save Changes
+                    </Button>
+                  </div>
+                )}
+              </div>
+              
               <div className="border rounded overflow-hidden mb-4">
                 <table className="w-full">
                   <thead className="bg-gray-50">
@@ -338,18 +484,52 @@ const SalesReport = () => {
                       <th className="px-4 py-2 text-center">Qty</th>
                       <th className="px-4 py-2 text-right">Rate</th>
                       <th className="px-4 py-2 text-right">Total</th>
+                      {isEditing && <th className="px-4 py-2 w-10"></th>}
                     </tr>
                   </thead>
                   <tbody>
-                    {saleDetail.items.map((item) => (
+                    {editedItems.map((item, index) => (
                       <tr key={item.id} className="border-t">
                         <td className="px-4 py-2">
                           <div className="font-medium">{item.category_name}</div>
                           <div className="text-xs text-gray-500">{item.barcode}</div>
                         </td>
-                        <td className="px-4 py-2 text-center">{item.quantity}</td>
+                        <td className="px-4 py-2 text-center">
+                          {isEditing ? (
+                            <div className="flex items-center justify-center space-x-1">
+                              <button
+                                type="button"
+                                className="w-6 h-6 flex items-center justify-center rounded bg-gray-200"
+                                onClick={() => handleUpdateItemQuantity(index, item.quantity - 1)}
+                              >
+                                <Minus size={12} />
+                              </button>
+                              <span className="text-center w-6">{item.quantity}</span>
+                              <button
+                                type="button"
+                                className="w-6 h-6 flex items-center justify-center rounded bg-gray-200"
+                                onClick={() => handleUpdateItemQuantity(index, item.quantity + 1)}
+                              >
+                                <Plus size={12} />
+                              </button>
+                            </div>
+                          ) : (
+                            item.quantity
+                          )}
+                        </td>
                         <td className="px-4 py-2 text-right">₹{item.sale_price.toFixed(2)}</td>
                         <td className="px-4 py-2 text-right">₹{item.item_final_price.toFixed(2)}</td>
+                        {isEditing && (
+                          <td className="px-4 py-2">
+                            <button
+                              type="button"
+                              className="p-1 text-gray-500 hover:text-red-500"
+                              onClick={() => handleRemoveItem(index)}
+                            >
+                              <X size={16} />
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -357,22 +537,45 @@ const SalesReport = () => {
               </div>
               
               <div className="bg-gray-50 p-4 rounded">
-                <div className="flex justify-between mb-1">
-                  <span>Total:</span>
-                  <span>₹{saleDetail.total_amount.toFixed(2)}</span>
-                </div>
-                
-                {saleDetail.total_discount > 0 && (
-                  <div className="flex justify-between mb-1">
-                    <span>Discount:</span>
-                    <span>₹{saleDetail.total_discount.toFixed(2)}</span>
-                  </div>
+                {isEditing ? (
+                  <>
+                    <div className="flex justify-between mb-1">
+                      <span>Total:</span>
+                      <span>₹{calculateEditedTotals().total.toFixed(2)}</span>
+                    </div>
+                    
+                    {saleDetail.total_discount > 0 && (
+                      <div className="flex justify-between mb-1">
+                        <span>Discount:</span>
+                        <span>₹{saleDetail.total_discount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    
+                    <div className="flex justify-between font-medium">
+                      <span>Final Amount:</span>
+                      <span>₹{calculateEditedTotals().final.toFixed(2)}</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex justify-between mb-1">
+                      <span>Total:</span>
+                      <span>₹{saleDetail.total_amount.toFixed(2)}</span>
+                    </div>
+                    
+                    {saleDetail.total_discount > 0 && (
+                      <div className="flex justify-between mb-1">
+                        <span>Discount:</span>
+                        <span>₹{saleDetail.total_discount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    
+                    <div className="flex justify-between font-medium">
+                      <span>Final Amount:</span>
+                      <span>₹{saleDetail.final_amount.toFixed(2)}</span>
+                    </div>
+                  </>
                 )}
-                
-                <div className="flex justify-between font-medium">
-                  <span>Final Amount:</span>
-                  <span>₹{saleDetail.final_amount.toFixed(2)}</span>
-                </div>
               </div>
             </div>
           )}

@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -7,8 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, FileUp, FileDown, Search } from 'lucide-react';
-import { getProductsApi, createProductApi, createCategoryApi, createManufacturerApi, exportProductsApi, importProductsApi } from '@/lib/api';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Plus, FileUp, FileDown, Search, Edit, X, Trash2 } from 'lucide-react';
+import { getProductsApi, createProductApi, updateProductApi, deleteProductApi, createCategoryApi, createManufacturerApi, exportProductsApi, importProductsApi } from '@/lib/api';
 import { useAppContext, Product } from '@/contexts/AppContext';
 
 const Inventory = () => {
@@ -20,6 +22,8 @@ const Inventory = () => {
   const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
   const [isAddManufacturerOpen, setIsAddManufacturerOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isEditProductOpen, setIsEditProductOpen] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   
   // Form states
   const [barcode, setBarcode] = useState('');
@@ -31,6 +35,8 @@ const Inventory = () => {
   const [categoryName, setCategoryName] = useState('');
   const [manufacturerName, setManufacturerName] = useState('');
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   
   // Fetch products
   const { data: products = [], isLoading } = useQuery({
@@ -47,9 +53,47 @@ const Inventory = () => {
       resetProductForm();
       queryClient.invalidateQueries({ queryKey: ['products'] });
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('Failed to add product:', error);
-      toast.error('Failed to add product');
+      if (error.message === 'Product with this barcode already exists') {
+        toast.error('Product with this barcode already exists');
+      } else {
+        toast.error('Failed to add product');
+      }
+    }
+  });
+
+  // Update product mutation
+  const updateProductMutation = useMutation({
+    mutationFn: (product: { id: number, data: any }) => {
+      return updateProductApi(product.id, product.data);
+    },
+    onSuccess: () => {
+      toast.success('Product updated successfully');
+      setIsEditProductOpen(false);
+      setEditingProduct(null);
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+    },
+    onError: (error) => {
+      console.error('Failed to update product:', error);
+      toast.error('Failed to update product');
+    }
+  });
+
+  // Delete product mutation
+  const deleteProductMutation = useMutation({
+    mutationFn: (id: number) => {
+      return deleteProductApi(id);
+    },
+    onSuccess: () => {
+      toast.success('Product deleted successfully');
+      setIsDeleteConfirmOpen(false);
+      setProductToDelete(null);
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+    },
+    onError: (error) => {
+      console.error('Failed to delete product:', error);
+      toast.error('Failed to delete product');
     }
   });
   
@@ -104,7 +148,7 @@ const Inventory = () => {
     }
   });
   
-  // Handle form submission
+  // Handle form submission for adding product
   const handleAddProduct = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -126,6 +170,34 @@ const Inventory = () => {
       cost_price: parseFloat(costPrice),
       sale_price: parseFloat(salePrice)
     });
+  };
+
+  // Handle form submission for editing product
+  const handleEditProduct = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!editingProduct || !categoryId || !manufacturerId || !quantity || !costPrice || !salePrice) {
+      toast.error('All fields are required');
+      return;
+    }
+    
+    updateProductMutation.mutate({
+      id: editingProduct.id,
+      data: {
+        category_id: parseInt(categoryId),
+        manufacturer_id: parseInt(manufacturerId),
+        quantity: parseInt(quantity),
+        cost_price: parseFloat(costPrice),
+        sale_price: parseFloat(salePrice)
+      }
+    });
+  };
+
+  // Handle delete product
+  const handleDeleteProduct = () => {
+    if (!productToDelete) return;
+    
+    deleteProductMutation.mutate(productToDelete.id);
   };
   
   const handleAddCategory = (e: React.FormEvent) => {
@@ -164,6 +236,23 @@ const Inventory = () => {
   const handleExportProducts = () => {
     exportProductsApi();
     toast.success('Exporting products');
+  };
+
+  // Setup edit product form
+  const setupEditProduct = (product: Product) => {
+    setEditingProduct(product);
+    setCategoryId(categories.find(c => c.name === product.category)?.id.toString() || '');
+    setManufacturerId(manufacturers.find(m => m.name === product.manufacturer)?.id.toString() || '');
+    setQuantity(product.quantity.toString());
+    setCostPrice(product.cost_price.toString());
+    setSalePrice(product.sale_price.toString());
+    setIsEditProductOpen(true);
+  };
+
+  // Setup delete product confirmation
+  const confirmDeleteProduct = (product: Product) => {
+    setProductToDelete(product);
+    setIsDeleteConfirmOpen(true);
   };
   
   const resetProductForm = () => {
@@ -236,16 +325,17 @@ const Inventory = () => {
                 <th className="px-4 py-2 text-right">Quantity</th>
                 <th className="px-4 py-2 text-right">Cost Price</th>
                 <th className="px-4 py-2 text-right">Sale Price</th>
+                <th className="px-4 py-2 text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-2 text-center">Loading...</td>
+                  <td colSpan={7} className="px-4 py-2 text-center">Loading...</td>
                 </tr>
               ) : filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-2 text-center">No products found</td>
+                  <td colSpan={7} className="px-4 py-2 text-center">No products found</td>
                 </tr>
               ) : (
                 filteredProducts.map((product: Product) => (
@@ -256,6 +346,22 @@ const Inventory = () => {
                     <td className="px-4 py-2 text-right">{product.quantity}</td>
                     <td className="px-4 py-2 text-right">₹{product.cost_price.toFixed(2)}</td>
                     <td className="px-4 py-2 text-right">₹{product.sale_price.toFixed(2)}</td>
+                    <td className="px-4 py-2 text-center">
+                      <div className="flex justify-center gap-2">
+                        <button 
+                          onClick={() => setupEditProduct(product)}
+                          className="p-1 text-gray-500 hover:text-blue-600"
+                        >
+                          <Edit size={16} />
+                        </button>
+                        <button 
+                          onClick={() => confirmDeleteProduct(product)}
+                          className="p-1 text-gray-500 hover:text-red-600"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}
@@ -385,6 +491,128 @@ const Inventory = () => {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Edit Product Dialog */}
+      <Dialog open={isEditProductOpen} onOpenChange={setIsEditProductOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Product</DialogTitle>
+          </DialogHeader>
+          
+          <form onSubmit={handleEditProduct}>
+            <div className="grid gap-4">
+              <div>
+                <label htmlFor="editBarcode" className="block text-sm font-medium mb-1">
+                  Barcode
+                </label>
+                <Input
+                  id="editBarcode"
+                  value={editingProduct?.barcode || ''}
+                  disabled
+                  className="bg-gray-100"
+                />
+                <p className="text-xs text-gray-500 mt-1">Barcode cannot be changed</p>
+              </div>
+              
+              <div className="flex gap-2 items-end">
+                <div className="flex-grow">
+                  <label htmlFor="editCategory" className="block text-sm font-medium mb-1">
+                    Category *
+                  </label>
+                  <Select value={categoryId} onValueChange={setCategoryId}>
+                    <SelectTrigger id="editCategory">
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((category) => (
+                        <SelectItem key={category.id} value={category.id.toString()}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <Button type="button" onClick={() => setIsAddCategoryOpen(true)}>
+                  <Plus size={16} />
+                </Button>
+              </div>
+              
+              <div className="flex gap-2 items-end">
+                <div className="flex-grow">
+                  <label htmlFor="editManufacturer" className="block text-sm font-medium mb-1">
+                    Manufacturer *
+                  </label>
+                  <Select value={manufacturerId} onValueChange={setManufacturerId}>
+                    <SelectTrigger id="editManufacturer">
+                      <SelectValue placeholder="Select manufacturer" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {manufacturers.map((manufacturer) => (
+                        <SelectItem key={manufacturer.id} value={manufacturer.id.toString()}>
+                          {manufacturer.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <Button type="button" onClick={() => setIsAddManufacturerOpen(true)}>
+                  <Plus size={16} />
+                </Button>
+              </div>
+              
+              <div>
+                <label htmlFor="editQuantity" className="block text-sm font-medium mb-1">
+                  Quantity *
+                </label>
+                <Input
+                  id="editQuantity"
+                  type="number"
+                  placeholder="Enter quantity"
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                  min="0"
+                />
+              </div>
+              
+              <div>
+                <label htmlFor="editCostPrice" className="block text-sm font-medium mb-1">
+                  Cost Price (₹) *
+                </label>
+                <Input
+                  id="editCostPrice"
+                  type="number"
+                  placeholder="Enter cost price"
+                  value={costPrice}
+                  onChange={(e) => setCostPrice(e.target.value)}
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+              
+              <div>
+                <label htmlFor="editSalePrice" className="block text-sm font-medium mb-1">
+                  Sale Price (₹) *
+                </label>
+                <Input
+                  id="editSalePrice"
+                  type="number"
+                  placeholder="Enter sale price"
+                  value={salePrice}
+                  onChange={(e) => setSalePrice(e.target.value)}
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+              
+              <Button type="submit" disabled={updateProductMutation.isPending}>
+                {updateProductMutation.isPending ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
       
       {/* Add Category Dialog */}
       <Dialog open={isAddCategoryOpen} onOpenChange={setIsAddCategoryOpen}>
@@ -475,6 +703,31 @@ const Inventory = () => {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Product</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this product? This action cannot be undone.
+              <div className="mt-2 p-2 bg-gray-100 rounded">
+                <p><strong>Barcode:</strong> {productToDelete?.barcode}</p>
+                <p><strong>Category:</strong> {productToDelete?.category}</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setProductToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteProduct}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Layout>
   );
 };

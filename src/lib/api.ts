@@ -1,3 +1,4 @@
+
 import axios from 'axios';
 
 // Change the base URL to point to the local development server
@@ -57,7 +58,7 @@ export const getProductByBarcodeApi = async (barcode: string) => {
     return response.data;
   } catch (error) {
     console.error('Error fetching product by barcode:', error);
-    throw error; // Re-throw the error so it can be caught by calling functions
+    throw error;
   }
 };
 
@@ -69,7 +70,31 @@ export const createProductApi = async (product: {
   cost_price: number;
   sale_price: number;
 }) => {
-  const response = await api.post('/products', product);
+  try {
+    const response = await api.post('/products', product);
+    return response.data;
+  } catch (error: any) {
+    if (error.response && error.response.status === 409) {
+      throw new Error('Product with this barcode already exists');
+    }
+    throw error;
+  }
+};
+
+export const updateProductApi = async (id: number, product: {
+  barcode?: string;
+  category_id?: number;
+  manufacturer_id?: number;
+  quantity?: number;
+  cost_price?: number;
+  sale_price?: number;
+}) => {
+  const response = await api.patch(`/products/${id}`, product);
+  return response.data;
+};
+
+export const deleteProductApi = async (id: number) => {
+  const response = await api.delete(`/products/${id}`);
   return response.data;
 };
 
