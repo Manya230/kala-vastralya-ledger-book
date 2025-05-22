@@ -48,12 +48,16 @@ export const getProductsApi = async () => {
 };
 
 export const getProductByBarcodeApi = async (barcode: string) => {
+  if (!barcode) {
+    return null;
+  }
+  
   try {
     const response = await api.get(`/products/${barcode}`);
     return response.data;
   } catch (error) {
     console.error('Error fetching product by barcode:', error);
-    return null;
+    throw error; // Re-throw the error so it can be caught by calling functions
   }
 };
 

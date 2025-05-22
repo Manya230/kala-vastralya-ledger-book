@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -103,7 +104,9 @@ const NewSale = () => {
     queryKey: ['product', barcode],
     queryFn: () => getProductByBarcodeApi(barcode),
     enabled: false,
-    onSuccess: handleProductSuccess,
+    meta: {
+      onSuccess: handleProductSuccess
+    },
     onError: (error: any) => {
       console.error('Error searching product:', error);
       toast.error('Failed to search product');
@@ -158,9 +161,13 @@ const NewSale = () => {
     
     console.log("Searching for product with barcode:", barcode);
     try {
-      // Here we directly invoke the searchProduct function and make sure the response is handled
       const result = await searchProduct();
       console.log("Search result:", result.data);
+      
+      // Manually call the success handler because Tanstack Query's meta.onSuccess isn't working as expected
+      if (result.data) {
+        handleProductSuccess(result.data);
+      }
     } catch (error) {
       console.error("Error searching for product:", error);
     }
