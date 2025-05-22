@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -176,6 +175,15 @@ const Inventory = () => {
     setSalePrice('');
   };
   
+  // Handle barcode input validation
+  const handleBarcodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    // Only allow numbers and limit to 8 digits
+    if (/^\d*$/.test(value) && value.length <= 8) {
+      setBarcode(value);
+    }
+  };
+  
   // Filter products based on search
   const filteredProducts = searchQuery
     ? products.filter((product: Product) => 
@@ -273,7 +281,8 @@ const Inventory = () => {
                   id="barcode"
                   placeholder="Enter 8-digit barcode"
                   value={barcode}
-                  onChange={(e) => setBarcode(e.target.value)}
+                  onChange={handleBarcodeChange}
+                  maxLength={8}
                 />
               </div>
               

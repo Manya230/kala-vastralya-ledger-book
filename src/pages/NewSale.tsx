@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -144,7 +143,7 @@ const NewSale = () => {
   });
   
   // Handle add item
-  const handleAddItem = (e: React.FormEvent) => {
+  const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!barcode) {
@@ -158,7 +157,13 @@ const NewSale = () => {
     }
     
     console.log("Searching for product with barcode:", barcode);
-    searchProduct();
+    try {
+      // Here we directly invoke the searchProduct function and make sure the response is handled
+      const result = await searchProduct();
+      console.log("Search result:", result.data);
+    } catch (error) {
+      console.error("Error searching for product:", error);
+    }
   };
   
   // Handle update item quantity
