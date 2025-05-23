@@ -49,7 +49,7 @@ const SalesReport = () => {
   // Filter states
   const [selectedDate, setSelectedDate] = useState<Date>();
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
-  const [filterType, setFilterType] = useState<string>('');
+  const [filterType, setFilterType] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   
   // Detail view states
@@ -75,7 +75,7 @@ const SalesReport = () => {
         }
       }
       
-      if (filterType) {
+      if (filterType && filterType !== 'all') {
         params.type = filterType;
       }
       
@@ -91,10 +91,10 @@ const SalesReport = () => {
   });
   
   // Fetch sale details
-  const { data: saleDetail, isLoading: isLoadingDetails } = useQuery<SaleDetail | null>({
+  const { data: saleDetail, isLoading: isLoadingDetails } = useQuery<SaleDetail>({
     queryKey: ['sale', selectedSaleId],
     queryFn: async () => {
-      if (!selectedSaleId) return null;
+      if (!selectedSaleId) throw new Error('No sale ID provided');
       console.log('Viewing sale details for ID:', selectedSaleId);
       const result = await getSaleByIdApi(selectedSaleId);
       return result;
@@ -151,7 +151,7 @@ const SalesReport = () => {
       }
     }
     
-    if (filterType) {
+    if (filterType && filterType !== 'all') {
       params.type = filterType;
     }
     
@@ -255,7 +255,7 @@ const SalesReport = () => {
                 <SelectValue placeholder="All types" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All types</SelectItem>
+                <SelectItem value="all">All types</SelectItem>
                 <SelectItem value="bill">Bills</SelectItem>
                 <SelectItem value="estimate">Estimates</SelectItem>
               </SelectContent>
