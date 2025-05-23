@@ -87,7 +87,6 @@ export const updateProductApi = async (id: number, product: {
   cost_price?: number;
   sale_price?: number;
 }) => {
-  // Use the correct endpoint structure without trailing slash
   const response = await api.patch(`/products/${id}`, product);
   return response.data;
 };
@@ -140,6 +139,13 @@ export const getSaleByIdApi = async (id: number) => {
   try {
     const response = await api.get(`/sales/${id}`);
     console.log('Sale details response:', response.data);
+    
+    if (!response.data.items || !Array.isArray(response.data.items) || response.data.items.length === 0) {
+      console.warn(`Sale ${id} has no items or items is not an array`, response.data);
+    } else {
+      console.log(`Sale ${id} has ${response.data.items.length} items`);
+    }
+    
     return response.data;
   } catch (error) {
     console.error(`Error fetching sale ${id}:`, error);

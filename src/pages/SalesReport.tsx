@@ -84,23 +84,31 @@ const SalesReport = () => {
   // Fetch sale details
   const { data: saleDetail, isLoading: isLoadingDetails } = useQuery({
     queryKey: ['sale', selectedSaleId],
-    queryFn: () => getSaleByIdApi(selectedSaleId!),
+    queryFn: async () => {
+      if (!selectedSaleId) return null;
+      const data = await getSaleByIdApi(selectedSaleId);
+      return data as SaleDetail;
+    },
     enabled: !!selectedSaleId,
-    onSuccess: (data) => {
-      console.log('Sale detail fetched:', data);
-      if (data && data.items) {
-        console.log('Setting edited items:', data.items);
-        setEditedItems(data.items);
-      } else {
-        console.log('No items found in sale detail');
+    staleTime: 0,
+    gcTime: 0,
+    meta: {
+      onSuccess: (data: SaleDetail | null) => {
+        console.log('Sale detail fetched:', data);
+        if (data && data.items) {
+          console.log('Setting edited items:', data.items);
+          setEditedItems(data.items);
+        } else {
+          console.log('No items found in sale detail');
+          setEditedItems([]);
+        }
+      },
+      onError: (error: Error) => {
+        console.error('Error fetching sale detail:', error);
+        toast.error('Failed to fetch sale details');
         setEditedItems([]);
       }
     },
-    onError: (error) => {
-      console.error('Error fetching sale detail:', error);
-      toast.error('Failed to fetch sale details');
-      setEditedItems([]);
-    }
   });
   
   // Update sale mutation
