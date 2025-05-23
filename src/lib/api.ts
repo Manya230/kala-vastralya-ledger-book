@@ -101,6 +101,32 @@ export const updateProductQuantityApi = async (id: number, quantity: number) => 
   return response.data;
 };
 
+// Define TypeScript interfaces for the API responses
+export interface SaleItem {
+  id: number;
+  product_id: number;
+  barcode: string;
+  category_name: string;
+  sale_price: number;
+  quantity: number;
+  item_final_price: number;
+}
+
+export interface Sale {
+  id: number;
+  type: string;
+  number: string;
+  customer_name: string;
+  mobile: string | null;
+  payment_mode: string | null;
+  date: string;
+  total_amount: number;
+  total_discount: number;
+  final_amount: number;
+  remarks?: string | null;
+  items?: SaleItem[];
+}
+
 // Sales API
 export const createSaleApi = async (sale: {
   type: string;
@@ -129,12 +155,12 @@ export const getSalesApi = async (params?: {
   endDate?: string;
   type?: string;
   search?: string;
-}) => {
+}): Promise<Sale[]> => {
   const response = await api.get('/sales', { params });
   return response.data;
 };
 
-export const getSaleByIdApi = async (id: number) => {
+export const getSaleByIdApi = async (id: number): Promise<Sale> => {
   console.log(`Fetching sale with id: ${id}`);
   try {
     const response = await api.get(`/sales/${id}`);
@@ -164,7 +190,7 @@ export const updateSaleApi = async (id: number, sale: {
     quantity: number;
     item_final_price: number;
   }>;
-}) => {
+}): Promise<Sale> => {
   const response = await api.put(`/sales/${id}`, sale);
   return response.data;
 };

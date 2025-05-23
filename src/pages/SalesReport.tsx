@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
@@ -82,33 +83,32 @@ const SalesReport = () => {
   });
   
   // Fetch sale details
-  const { data: saleDetail, isLoading: isLoadingDetails } = useQuery({
+  const { data: saleDetail, isLoading: isLoadingDetails } = useQuery<SaleDetail | null, Error>({
     queryKey: ['sale', selectedSaleId],
     queryFn: async () => {
       if (!selectedSaleId) return null;
       const data = await getSaleByIdApi(selectedSaleId);
+      console.log("Data received in queryFn:", data);
       return data as SaleDetail;
     },
     enabled: !!selectedSaleId,
     staleTime: 0,
     gcTime: 0,
-    meta: {
-      onSuccess: (data: SaleDetail | null) => {
-        console.log('Sale detail fetched:', data);
-        if (data && data.items) {
-          console.log('Setting edited items:', data.items);
-          setEditedItems(data.items);
-        } else {
-          console.log('No items found in sale detail');
-          setEditedItems([]);
-        }
-      },
-      onError: (error: Error) => {
-        console.error('Error fetching sale detail:', error);
-        toast.error('Failed to fetch sale details');
+    onSuccess: (data) => {
+      console.log('Sale detail success handler:', data);
+      if (data && data.items) {
+        console.log('Setting edited items from data:', data.items);
+        setEditedItems(data.items);
+      } else {
+        console.log('No items found in sale detail success handler');
         setEditedItems([]);
       }
     },
+    onError: (error) => {
+      console.error('Error fetching sale detail in onError handler:', error);
+      toast.error('Failed to fetch sale details');
+      setEditedItems([]);
+    }
   });
   
   // Update sale mutation
@@ -186,7 +186,6 @@ const SalesReport = () => {
     const updatedItems = [...editedItems];
     const item = updatedItems[index];
     const currentQuantity = item.quantity;
-    const quantityDiff = newQuantity - currentQuantity;
     
     // Update the item quantity
     updatedItems[index] = {
@@ -511,8 +510,8 @@ const SalesReport = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {editedItems && editedItems.length > 0 ? (
-                      editedItems.map((item, index) => (
+                    {saleDetail.items && saleDetail.items.length > 0 ? (
+                      (isEditing ? editedItems : saleDetail.items).map((item, index) => (
                         <tr key={item.id || index} className="border-t">
                           <td className="px-4 py-2">
                             <div className="font-medium">{item.category_name}</div>
