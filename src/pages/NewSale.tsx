@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -14,6 +15,11 @@ import { getProductByBarcodeApi, createSaleApi } from '@/lib/api';
 import { CartItem } from '@/contexts/AppContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
+interface CartItemWithDiscount extends CartItem {
+  discount_percent: number;
+  discount_amount: number;
+}
+
 const NewSale = () => {
   const navigate = useNavigate();
   
@@ -26,7 +32,7 @@ const NewSale = () => {
   const [remarks, setRemarks] = useState('');
   
   // Cart states
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [cartItems, setCartItems] = useState<CartItemWithDiscount[]>([]);
   const [totalAmount, setTotalAmount] = useState(0);
   const [discount, setDiscount] = useState(0);
   const [finalAmount, setFinalAmount] = useState(0);
@@ -39,12 +45,16 @@ const NewSale = () => {
   // Effect to recalculate totals when cart changes
   useEffect(() => {
     const total = cartItems.reduce((sum, item) => sum + item.item_final_price, 0);
-    setTotalAmount(total);
-    setFinalAmount(total - discount);
-  }, [cartItems, discount]);
+    const totalDiscountAmount = cartItems.reduce((sum, item) => sum + item.discount_amount, 0);
+    
+    setTotalAmount(total + totalDiscountAmount);
+    setDiscount(totalDiscountAmount);
+    setFinalAmount(total);
+  }, [cartItems]);
   
   // Effect to update discount when final amount changes
   useEffect(() => {
+    // Only update the final amount if discount is manually changed (not from item discounts)
     const calculatedDiscount = totalAmount - finalAmount;
     if (calculatedDiscount !== discount) {
       setDiscount(calculatedDiscount >= 0 ? calculatedDiscount : 0);
@@ -77,10 +87,15 @@ const NewSale = () => {
             toast.error(`Only ${data.quantity} items available in stock`);
             return item;
           }
+          
+          const updatedPrice = data.sale_price * newQuantity;
+          const discount_amount = (item.discount_percent / 100) * updatedPrice;
+          
           return {
             ...item,
             quantity: newQuantity,
-            item_final_price: data.sale_price * newQuantity
+            item_final_price: updatedPrice - discount_amount,
+            discount_amount: discount_amount
           };
         }
         return item;
@@ -95,6 +110,8 @@ const NewSale = () => {
         category_name: data.category,
         sale_price: data.sale_price,
         quantity: quantity,
+        discount_percent: 0,
+        discount_amount: 0,
         item_final_price: data.sale_price * quantity
       }]);
     }
@@ -109,11 +126,9 @@ const NewSale = () => {
     queryKey: ['product', barcode],
     queryFn: () => getProductByBarcodeApi(barcode),
     enabled: false,
-    meta: {
-      onSuccess: handleProductSuccess,
-      onError: () => {
-        toast.error('Product not found');
-      }
+    onSuccess: handleProductSuccess,
+    onError: () => {
+      toast.error('Product not found');
     }
   });
   
@@ -198,10 +213,37 @@ const NewSale = () => {
     
     const newCart = cartItems.map(item => {
       if (item.product_id === productId) {
+        const updatedPrice = item.sale_price * newQuantity;
+        const discountAmount = (item.discount_percent / 100) * updatedPrice;
+        
         return {
           ...item,
           quantity: newQuantity,
-          item_final_price: item.sale_price * newQuantity
+          discount_amount: discountAmount,
+          item_final_price: updatedPrice - discountAmount
+        };
+      }
+      return item;
+    });
+    
+    setCartItems(newCart);
+  };
+  
+  // Handle update item discount
+  const updateItemDiscount = (productId: number, discountPercent: number) => {
+    // Limit discount between 0 and 100
+    const limitedDiscount = Math.max(0, Math.min(100, discountPercent));
+    
+    const newCart = cartItems.map(item => {
+      if (item.product_id === productId) {
+        const totalPrice = item.sale_price * item.quantity;
+        const discountAmount = (limitedDiscount / 100) * totalPrice;
+        
+        return {
+          ...item,
+          discount_percent: limitedDiscount,
+          discount_amount: discountAmount,
+          item_final_price: totalPrice - discountAmount
         };
       }
       return item;
@@ -231,7 +273,7 @@ const NewSale = () => {
       total_amount: totalAmount,
       total_discount: discount,
       final_amount: finalAmount,
-      items: cartItems
+      items: cartItems.map(({discount_percent, discount_amount, ...item}) => item)
     });
   };
   
@@ -386,6 +428,7 @@ const NewSale = () => {
                       <th className="px-4 py-2 text-left">Item</th>
                       <th className="px-4 py-2 text-center">Qty</th>
                       <th className="px-4 py-2 text-right">Rate</th>
+                      <th className="px-4 py-2 text-right">Discount</th>
                       <th className="px-4 py-2 text-right">Total</th>
                       <th className="px-2 py-2"></th>
                     </tr>
@@ -417,6 +460,16 @@ const NewSale = () => {
                           </div>
                         </td>
                         <td className="px-4 py-2 text-right">₹{(item.sale_price ?? 0).toFixed(2)}</td>
+                        <td className="px-4 py-2 text-right">
+                          <Input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={item.discount_percent}
+                            onChange={(e) => updateItemDiscount(item.product_id, parseFloat(e.target.value) || 0)}
+                            className="h-7 w-14 text-right"
+                          />%
+                        </td>
                         <td className="px-4 py-2 text-right">₹{(item.item_final_price ?? 0).toFixed(2)}</td>
                         <td className="px-2 py-2">
                           <button
@@ -438,7 +491,7 @@ const NewSale = () => {
                     <span>₹{totalAmount.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between mb-2">
-                    <span>Discount:</span>
+                    <span>Total Discount:</span>
                     <div className="w-24">
                       <Input
                         type="number"
@@ -577,7 +630,7 @@ const NewSale = () => {
                 
                 {receiptData.total_discount > 0 && (
                   <div className="flex justify-between mb-1">
-                    <span>Discount:</span>
+                    <span>Total Discount:</span>
                     <span>₹{receiptData.total_discount.toFixed(2)}</span>
                   </div>
                 )}
