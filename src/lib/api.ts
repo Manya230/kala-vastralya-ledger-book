@@ -31,7 +31,6 @@ export const createCategoryApi = async (name: string) => {
   return response.data;
 };
 
-// Manufacturer API
 export const getManufacturersApi = async () => {
   const response = await api.get('/manufacturers');
   return response.data;
@@ -42,7 +41,6 @@ export const createManufacturerApi = async (name: string) => {
   return response.data;
 };
 
-// Product API
 export const getProductsApi = async () => {
   const response = await api.get('/products');
   return response.data;
@@ -89,19 +87,17 @@ export const updateProductApi = async (id: number, product: {
   cost_price?: number;
   sale_price?: number;
 }) => {
-  // Use the correct endpoint structure: /products/id
+  // Use the correct endpoint structure without trailing slash
   const response = await api.patch(`/products/${id}`, product);
   return response.data;
 };
 
 export const deleteProductApi = async (id: number) => {
-  // Use the correct endpoint structure: /products/id
   const response = await api.delete(`/products/${id}`);
   return response.data;
 };
 
 export const updateProductQuantityApi = async (id: number, quantity: number) => {
-  // Use the correct endpoint structure: /products/id/quantity
   const response = await api.patch(`/products/${id}/quantity`, { quantity });
   return response.data;
 };
@@ -140,8 +136,15 @@ export const getSalesApi = async (params?: {
 };
 
 export const getSaleByIdApi = async (id: number) => {
-  const response = await api.get(`/sales/${id}`);
-  return response.data;
+  console.log(`Fetching sale with id: ${id}`);
+  try {
+    const response = await api.get(`/sales/${id}`);
+    console.log('Sale details response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`Error fetching sale ${id}:`, error);
+    throw error;
+  }
 };
 
 export const updateSaleApi = async (id: number, sale: {

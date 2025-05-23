@@ -6,7 +6,7 @@ import Layout from '@/components/Layout';
 import Card from '@/components/Card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { getSalesApi, getSaleByIdApi, exportSalesApi, updateSaleApi, updateProductQuantityApi } from '@/lib/api';
 import { Search, Calendar, FileDown, X, Plus, Minus } from 'lucide-react';
@@ -86,12 +86,20 @@ const SalesReport = () => {
     queryKey: ['sale', selectedSaleId],
     queryFn: () => getSaleByIdApi(selectedSaleId!),
     enabled: !!selectedSaleId,
-    meta: {
-      onSettled: (data: SaleDetail | undefined) => {
-        if (data?.items) {
-          setEditedItems(data.items);
-        }
+    onSuccess: (data) => {
+      console.log('Sale detail fetched:', data);
+      if (data && data.items) {
+        console.log('Setting edited items:', data.items);
+        setEditedItems(data.items);
+      } else {
+        console.log('No items found in sale detail');
+        setEditedItems([]);
       }
+    },
+    onError: (error) => {
+      console.error('Error fetching sale detail:', error);
+      toast.error('Failed to fetch sale details');
+      setEditedItems([]);
     }
   });
   
@@ -121,6 +129,7 @@ const SalesReport = () => {
   
   // Handle view sale details
   const handleViewDetails = (id: number) => {
+    console.log('Viewing sale details for ID:', id);
     setSelectedSaleId(id);
     setIsDetailsOpen(true);
     setIsEditing(false);
@@ -419,6 +428,9 @@ const SalesReport = () => {
                 'Sale Details'
               )}
             </DialogTitle>
+            <DialogDescription>
+              Sale ID: {selectedSaleId}
+            </DialogDescription>
           </DialogHeader>
           
           {isLoadingDetails || !saleDetail ? (
@@ -493,7 +505,7 @@ const SalesReport = () => {
                   <tbody>
                     {editedItems && editedItems.length > 0 ? (
                       editedItems.map((item, index) => (
-                        <tr key={item.id} className="border-t">
+                        <tr key={item.id || index} className="border-t">
                           <td className="px-4 py-2">
                             <div className="font-medium">{item.category_name}</div>
                           </td>
