@@ -126,9 +126,11 @@ const NewSale = () => {
     queryKey: ['product', barcode],
     queryFn: () => getProductByBarcodeApi(barcode),
     enabled: false,
-    onSuccess: handleProductSuccess,
-    onError: () => {
-      toast.error('Product not found');
+    meta: {
+      onSuccess: handleProductSuccess,
+      onError: () => {
+        toast.error('Product not found');
+      }
     }
   });
   

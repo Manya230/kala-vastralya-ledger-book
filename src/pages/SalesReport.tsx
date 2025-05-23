@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -83,7 +83,7 @@ const SalesReport = () => {
   });
   
   // Fetch sale details
-  const { data: saleDetail, isLoading: isLoadingDetails } = useQuery<SaleDetail | null, Error>({
+  const { data: saleDetail, isLoading: isLoadingDetails } = useQuery<SaleDetail | null>({
     queryKey: ['sale', selectedSaleId],
     queryFn: async () => {
       if (!selectedSaleId) return null;
@@ -93,23 +93,19 @@ const SalesReport = () => {
     },
     enabled: !!selectedSaleId,
     staleTime: 0,
-    gcTime: 0,
-    onSuccess: (data) => {
-      console.log('Sale detail success handler:', data);
-      if (data && data.items) {
-        console.log('Setting edited items from data:', data.items);
-        setEditedItems(data.items);
-      } else {
-        console.log('No items found in sale detail success handler');
-        setEditedItems([]);
-      }
-    },
-    onError: (error) => {
-      console.error('Error fetching sale detail in onError handler:', error);
-      toast.error('Failed to fetch sale details');
+    gcTime: 0
+  });
+
+  // Effect to set edited items when sale detail changes
+  useEffect(() => {
+    if (saleDetail && saleDetail.items) {
+      console.log('Setting edited items from data:', saleDetail.items);
+      setEditedItems(saleDetail.items);
+    } else {
+      console.log('No items found in sale detail');
       setEditedItems([]);
     }
-  });
+  }, [saleDetail]);
   
   // Update sale mutation
   const updateSaleMutation = useMutation({
