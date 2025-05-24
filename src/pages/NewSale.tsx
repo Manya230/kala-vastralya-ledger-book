@@ -729,7 +729,7 @@ const NewSale = () => {
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                   <p className="text-sm text-gray-500">
-                    {receiptType === 'bill' ? 'Bill' : 'Estimate'} Number
+                    Estimate Number
                   </p>
                   <p className="font-medium">{receiptData.number}</p>
                 </div>
