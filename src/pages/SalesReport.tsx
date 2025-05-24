@@ -49,7 +49,7 @@ const SalesReport = () => {
   // Filter states
   const [selectedDate, setSelectedDate] = useState<Date>();
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
-  const [filterType, setFilterType] = useState<string>('');
+  const [filterType, setFilterType] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   
   // Detail view states
@@ -75,7 +75,7 @@ const SalesReport = () => {
         }
       }
       
-      if (filterType) {
+      if (filterType && filterType !== 'all') {
         params.type = filterType;
       }
       
@@ -151,7 +151,7 @@ const SalesReport = () => {
       }
     }
     
-    if (filterType) {
+    if (filterType && filterType !== 'all') {
       params.type = filterType;
     }
     
@@ -255,7 +255,7 @@ const SalesReport = () => {
                 <SelectValue placeholder="All types" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All types</SelectItem>
+                <SelectItem value="all">All types</SelectItem>
                 <SelectItem value="bill">Bills</SelectItem>
                 <SelectItem value="estimate">Estimates</SelectItem>
               </SelectContent>
