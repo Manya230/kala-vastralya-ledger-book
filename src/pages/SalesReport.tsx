@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { CalendarIcon, Eye, Download, Edit3, Save, X, Plus, Minus } from 'lucide-react';
 import { getSalesApi, exportSalesApi, getSaleByIdApi, updateSaleApi, SaleItem } from '@/lib/api';
 
@@ -46,15 +46,19 @@ interface Sale {
 const SalesReport = () => {
   const queryClient = useQueryClient();
   
+  // Initialize with current date
+  const today = new Date();
+  
   // Filter states
-  const [selectedDate, setSelectedDate] = useState<Date>();
+  const [selectedDate, setSelectedDate] = useState<Date>(today);
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
+  const [filterMode, setFilterMode] = useState<'daily' | 'range'>('daily');
   const [filterType, setFilterType] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   
   // Detail view states
   const [selectedSaleId, setSelectedSaleId] = useState<number | null>(null);
-  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
   
   // Edit mode states
   const [isEditMode, setIsEditMode] = useState(false);
@@ -62,13 +66,13 @@ const SalesReport = () => {
   
   // Fetch sales data
   const { data: sales = [], isLoading, refetch } = useQuery({
-    queryKey: ['sales', selectedDate, dateRange, filterType, searchQuery],
+    queryKey: ['sales', selectedDate, dateRange, filterMode, filterType, searchQuery],
     queryFn: async () => {
       const params: any = {};
       
-      if (selectedDate) {
+      if (filterMode === 'daily' && selectedDate) {
         params.date = format(selectedDate, 'yyyy-MM-dd');
-      } else if (dateRange.from) {
+      } else if (filterMode === 'range' && dateRange.from) {
         params.startDate = format(dateRange.from, 'yyyy-MM-dd');
         if (dateRange.to) {
           params.endDate = format(dateRange.to, 'yyyy-MM-dd');
@@ -134,7 +138,7 @@ const SalesReport = () => {
   const handleViewDetails = (saleId: number) => {
     console.log('Opening details for sale ID:', saleId);
     setSelectedSaleId(saleId);
-    setIsSheetOpen(true);
+    setIsDialogOpen(true);
     setIsEditMode(false);
   };
   
@@ -142,9 +146,9 @@ const SalesReport = () => {
   const handleExport = () => {
     const params: any = {};
     
-    if (selectedDate) {
+    if (filterMode === 'daily' && selectedDate) {
       params.date = format(selectedDate, 'yyyy-MM-dd');
-    } else if (dateRange.from) {
+    } else if (filterMode === 'range' && dateRange.from) {
       params.startDate = format(dateRange.from, 'yyyy-MM-dd');
       if (dateRange.to) {
         params.endDate = format(dateRange.to, 'yyyy-MM-dd');
@@ -221,32 +225,97 @@ const SalesReport = () => {
     return { totalDiscount, finalAmount };
   };
   
+  // Calculate summary statistics
+  const totalTransactions = sales.length;
+  const totalAmount = sales.reduce((sum: number, sale: Sale) => sum + sale.final_amount, 0);
+  
   const { totalDiscount, finalAmount } = calculateTotals();
   
   return (
     <Layout>
       <Card title="Sales Report">
+        {/* Date Mode Toggle */}
+        <div className="mb-4 flex gap-2">
+          <Button
+            variant={filterMode === 'daily' ? 'default' : 'outline'}
+            onClick={() => setFilterMode('daily')}
+            className="bg-kalan-blue hover:bg-kalan-blue/90"
+          >
+            Daily
+          </Button>
+          <Button
+            variant={filterMode === 'range' ? 'default' : 'outline'}
+            onClick={() => setFilterMode('range')}
+            className="bg-kalan-blue hover:bg-kalan-blue/90"
+          >
+            Date Range
+          </Button>
+        </div>
+
         {/* Filters */}
         <div className="mb-6 grid md:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Date</label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="w-full justify-start text-left font-normal">
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {selectedDate ? format(selectedDate, 'dd/MM/yyyy') : 'Select date'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <Calendar
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={setSelectedDate}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
+          {filterMode === 'daily' ? (
+            <div>
+              <label className="block text-sm font-medium mb-1">Date</label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start text-left font-normal">
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {selectedDate ? format(selectedDate, 'dd/MM/yyyy') : 'Select date'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={(date) => date && setSelectedDate(date)}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+          ) : (
+            <>
+              <div>
+                <label className="block text-sm font-medium mb-1">From Date</label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-start text-left font-normal">
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {dateRange.from ? format(dateRange.from, 'dd/MM/yyyy') : 'From date'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={dateRange.from}
+                      onSelect={(date) => setDateRange(prev => ({ ...prev, from: date }))}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">To Date</label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-start text-left font-normal">
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {dateRange.to ? format(dateRange.to, 'dd/MM/yyyy') : 'To date'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={dateRange.to}
+                      onSelect={(date) => setDateRange(prev => ({ ...prev, to: date }))}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </>
+          )}
           
           <div>
             <label className="block text-sm font-medium mb-1">Type</label>
@@ -255,7 +324,7 @@ const SalesReport = () => {
                 <SelectValue placeholder="All types" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All types</SelectItem>
+                <SelectItem value="all">All</SelectItem>
                 <SelectItem value="bill">Bills</SelectItem>
                 <SelectItem value="estimate">Estimates</SelectItem>
               </SelectContent>
@@ -263,20 +332,29 @@ const SalesReport = () => {
           </div>
           
           <div>
-            <label className="block text-sm font-medium mb-1">Search</label>
+            <label className="block text-sm font-medium mb-1">Search by name or mobile</label>
             <Input
               placeholder="Search by customer name..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          
-          <div className="flex items-end">
-            <Button onClick={handleExport} variant="outline" className="w-full">
-              <Download size={16} className="mr-2" />
-              Export
-            </Button>
+        </div>
+
+        {/* Summary and Export */}
+        <div className="mb-6 flex justify-between items-center">
+          <div className="flex gap-6">
+            <div>
+              <span className="text-sm text-gray-600">{totalTransactions} transactions</span>
+            </div>
+            <div>
+              <span className="text-sm text-gray-600">Total: ₹{totalAmount.toFixed(2)}</span>
+            </div>
           </div>
+          <Button onClick={handleExport} variant="outline" className="bg-kalan-blue text-white hover:bg-kalan-blue/90">
+            <Download size={16} className="mr-2" />
+            Export Excel
+          </Button>
         </div>
         
         {/* Sales Table */}
@@ -284,43 +362,48 @@ const SalesReport = () => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-2 text-left">Type</th>
-                <th className="px-4 py-2 text-left">Number</th>
-                <th className="px-4 py-2 text-left">Customer</th>
                 <th className="px-4 py-2 text-left">Date</th>
+                <th className="px-4 py-2 text-left">Number</th>
+                <th className="px-4 py-2 text-left">Type</th>
+                <th className="px-4 py-2 text-left">Customer</th>
                 <th className="px-4 py-2 text-right">Amount</th>
+                <th className="px-4 py-2 text-left">Payment</th>
                 <th className="px-4 py-2 text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
                     Loading...
                   </td>
                 </tr>
               ) : sales.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
                     No sales found
                   </td>
                 </tr>
               ) : (
                 sales.map((sale: Sale) => (
                   <tr key={sale.id} className="border-t">
+                    <td className="px-4 py-2">{format(new Date(sale.date), 'dd/MM/yyyy HH:mm')}</td>
+                    <td className="px-4 py-2 font-medium">{sale.number}</td>
                     <td className="px-4 py-2">
                       <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
                         sale.type === 'bill' 
                           ? 'bg-green-100 text-green-800' 
                           : 'bg-blue-100 text-blue-800'
                       }`}>
-                        {sale.type.toUpperCase()}
+                        {sale.type === 'bill' ? 'Bill' : 'Estimate'}
                       </span>
                     </td>
-                    <td className="px-4 py-2 font-medium">{sale.number}</td>
-                    <td className="px-4 py-2">{sale.customer_name}</td>
-                    <td className="px-4 py-2">{format(new Date(sale.date), 'dd/MM/yyyy')}</td>
+                    <td className="px-4 py-2">
+                      <div>{sale.customer_name}</div>
+                      {sale.mobile && <div className="text-xs text-gray-500">{sale.mobile}</div>}
+                    </td>
                     <td className="px-4 py-2 text-right">₹{sale.final_amount.toFixed(2)}</td>
+                    <td className="px-4 py-2">{sale.payment_mode || '-'}</td>
                     <td className="px-4 py-2 text-center">
                       <Button
                         size="sm"
@@ -339,23 +422,26 @@ const SalesReport = () => {
         </div>
       </Card>
       
-      {/* Sale Details Sheet */}
-      <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>
+      {/* Sale Details Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
               {saleDetail?.type === 'bill' ? 'Bill' : 'Estimate'} Details
-            </SheetTitle>
-          </SheetHeader>
+            </DialogTitle>
+          </DialogHeader>
           
           {isLoadingDetails ? (
             <div className="py-8 text-center">Loading...</div>
           ) : !saleDetail ? (
             <div className="py-8 text-center text-gray-500">Sale not found</div>
           ) : (
-            <div className="space-y-6 mt-6">
+            <div className="space-y-6">
               {/* Sale Information */}
               <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-500">Sale ID: {saleDetail.id}</p>
+                </div>
                 <div>
                   <p className="text-sm text-gray-500">{saleDetail.type === 'bill' ? 'Bill' : 'Estimate'} Number</p>
                   <p className="font-medium">{saleDetail.number}</p>
@@ -369,13 +455,13 @@ const SalesReport = () => {
                   <p className="font-medium">{saleDetail.customer_name}</p>
                 </div>
                 {saleDetail.mobile && (
-                  <div>
+                  <div className="col-span-2">
                     <p className="text-sm text-gray-500">Mobile</p>
                     <p className="font-medium">{saleDetail.mobile}</p>
                   </div>
                 )}
                 {saleDetail.payment_mode && (
-                  <div>
+                  <div className="col-span-2">
                     <p className="text-sm text-gray-500">Payment Mode</p>
                     <p className="font-medium capitalize">{saleDetail.payment_mode}</p>
                   </div>
@@ -391,12 +477,12 @@ const SalesReport = () => {
               {/* Items Section */}
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-medium">Items</h3>
+                  <h3 className="text-lg font-medium">Items:</h3>
                   <Button
                     size="sm"
                     variant={isEditMode ? "outline" : "default"}
                     onClick={handleEditToggle}
-                    className={isEditMode ? "" : "bg-blue-600 hover:bg-blue-700"}
+                    className={isEditMode ? "" : "bg-kalan-blue hover:bg-kalan-blue/90"}
                   >
                     {isEditMode ? (
                       <>
@@ -469,7 +555,7 @@ const SalesReport = () => {
                     <Button 
                       onClick={handleSaveChanges}
                       disabled={updateSaleMutation.isPending}
-                      className="bg-blue-600 hover:bg-blue-700"
+                      className="bg-kalan-blue hover:bg-kalan-blue/90"
                     >
                       <Save size={14} className="mr-1" />
                       Save Changes
@@ -481,13 +567,13 @@ const SalesReport = () => {
               {/* Totals */}
               <div className="bg-gray-50 p-4 rounded-lg space-y-2">
                 <div className="flex justify-between">
-                  <span>Total Amount:</span>
+                  <span>Total:</span>
                   <span>₹{saleDetail.total_amount.toFixed(2)}</span>
                 </div>
                 
                 {totalDiscount > 0 && (
                   <div className="flex justify-between">
-                    <span>Total Discount:</span>
+                    <span>Discount:</span>
                     <span>₹{totalDiscount.toFixed(2)}</span>
                   </div>
                 )}
@@ -499,8 +585,8 @@ const SalesReport = () => {
               </div>
             </div>
           )}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 };
