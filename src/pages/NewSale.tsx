@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -26,6 +25,8 @@ const NewSale = () => {
   // Form states
   const [customerName, setCustomerName] = useState('');
   const [mobileNumber, setMobileNumber] = useState('');
+  const [customerAddress, setCustomerAddress] = useState('');
+  const [customerGstNumber, setCustomerGstNumber] = useState('');
   const [barcode, setBarcode] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [paymentMode, setPaymentMode] = useState<string | undefined>(undefined);
@@ -44,12 +45,12 @@ const NewSale = () => {
   
   // Effect to recalculate totals when cart changes
   useEffect(() => {
-    const total = cartItems.reduce((sum, item) => sum + item.item_final_price, 0);
+    const total = cartItems.reduce((sum, item) => sum + (item.sale_price * item.quantity), 0);
     const totalDiscountAmount = cartItems.reduce((sum, item) => sum + item.discount_amount, 0);
     
-    setTotalAmount(total + totalDiscountAmount);
+    setTotalAmount(total);
     setDiscount(totalDiscountAmount);
-    setFinalAmount(total);
+    setFinalAmount(total - totalDiscountAmount);
   }, [cartItems]);
   
   // Effect to update discount when final amount changes
@@ -94,7 +95,7 @@ const NewSale = () => {
           return {
             ...item,
             quantity: newQuantity,
-            item_final_price: updatedPrice - discount_amount,
+            item_final_price: updatedPrice,
             discount_amount: discount_amount
           };
         }
@@ -163,6 +164,8 @@ const NewSale = () => {
         ...data,
         customer_name: customerName,
         mobile: mobileNumber,
+        customer_address: customerAddress,
+        customer_gst_number: customerGstNumber,
         payment_mode: paymentMode,
         items: cartItems.map(item => ({
           ...item,
@@ -222,7 +225,7 @@ const NewSale = () => {
           ...item,
           quantity: newQuantity,
           discount_amount: discountAmount,
-          item_final_price: updatedPrice - discountAmount
+          item_final_price: updatedPrice
         };
       }
       return item;
@@ -245,7 +248,7 @@ const NewSale = () => {
           ...item,
           discount_percent: limitedDiscount,
           discount_amount: discountAmount,
-          item_final_price: totalPrice - discountAmount
+          item_final_price: totalPrice // Keep the original amount, don't subtract discount
         };
       }
       return item;
@@ -335,6 +338,31 @@ const NewSale = () => {
                   value={mobileNumber}
                   onChange={handleMobileNumberChange}
                   maxLength={10}
+                />
+              </div>
+              
+              <div>
+                <label htmlFor="customerAddress" className="block text-sm font-medium mb-1">
+                  Address
+                </label>
+                <Textarea
+                  id="customerAddress"
+                  placeholder="Enter customer address"
+                  value={customerAddress}
+                  onChange={(e) => setCustomerAddress(e.target.value)}
+                  rows={2}
+                />
+              </div>
+              
+              <div>
+                <label htmlFor="customerGstNumber" className="block text-sm font-medium mb-1">
+                  GSTIN Number
+                </label>
+                <Input
+                  id="customerGstNumber"
+                  placeholder="Enter GSTIN number"
+                  value={customerGstNumber}
+                  onChange={(e) => setCustomerGstNumber(e.target.value)}
                 />
               </div>
             </div>
@@ -431,7 +459,7 @@ const NewSale = () => {
                       <th className="px-4 py-2 text-center">Qty</th>
                       <th className="px-4 py-2 text-right">Rate</th>
                       <th className="px-4 py-2 text-right">Discount</th>
-                      <th className="px-4 py-2 text-right">Total</th>
+                      <th className="px-4 py-2 text-right">Amount</th>
                       <th className="px-2 py-2"></th>
                     </tr>
                   </thead>
@@ -489,7 +517,7 @@ const NewSale = () => {
                 
                 <div className="bg-gray-50 p-4 border-t">
                   <div className="flex justify-between mb-2">
-                    <span>Final Price:</span>
+                    <span>Total:</span>
                     <span>₹{totalAmount.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between mb-2">
@@ -498,7 +526,7 @@ const NewSale = () => {
                       <Input
                         type="number"
                         min="0"
-                        step="0.01"
+                        step="1"
                         value={discount}
                         onChange={handleDiscountChange}
                         className="h-7 text-right"
@@ -506,7 +534,7 @@ const NewSale = () => {
                     </div>
                   </div>
                   <div className="flex justify-between">
-                    <span className="font-medium">To Pay:</span>
+                    <span className="font-medium">Grand Total (incl taxes):</span>
                     <div className="w-24">
                       <Input
                         type="number"
@@ -557,16 +585,146 @@ const NewSale = () => {
               <X size={16} />
             </Button>
             <DialogTitle className="text-center">
-              {receiptType === 'bill' && <div className="text-xl font-bold">KALA VASTRALYA</div>}
-              <div>
-                {receiptType === 'bill' ? 'Bill' : 'Estimate'} Details
-              </div>
+              {receiptType === 'bill' ? (
+                <div className="text-xl font-bold">KALAN VASTRALYA</div>
+              ) : (
+                <div>Estimate/Challan</div>
+              )}
             </DialogTitle>
           </DialogHeader>
           
           {!receiptData ? (
             <div className="py-8 text-center">Loading...</div>
+          ) : receiptType === 'bill' ? (
+            // Custom Bill Format
+            <div className="border border-black">
+              {/* Header */}
+              <div className="grid grid-cols-3 border-b border-black">
+                <div className="border-r border-black p-2">
+                  <div className="text-sm">Mob 9053555965, 0416930965</div>
+                </div>
+                <div className="border-r border-black p-2 text-center">
+                  <div className="font-bold text-lg">BILL</div>
+                </div>
+                <div className="p-2 text-right">
+                  <div className="text-sm">GSTIN: 06AEBPY4971P1ZN</div>
+                </div>
+              </div>
+              
+              {/* Company Name */}
+              <div className="text-center border-b border-black p-2">
+                <div className="font-bold text-xl">KALAN VASTRALYA</div>
+              </div>
+              
+              {/* Address */}
+              <div className="text-center border-b border-black p-2">
+                <div className="text-sm">254B, Opp RJS Plaza, Pataudi Road, Haily Mandi</div>
+              </div>
+              
+              {/* Customer Details and Bill Info */}
+              <div className="grid grid-cols-2 border-b border-black">
+                <div className="border-r border-black">
+                  <div className="border-b border-black p-2 text-center font-bold">Customer Details</div>
+                  <div className="grid grid-cols-2">
+                    <div className="border-r border-black p-2 font-bold">Name</div>
+                    <div className="p-2">{receiptData.customer_name}</div>
+                  </div>
+                  {receiptData.mobile && (
+                    <div className="grid grid-cols-2 border-t border-black">
+                      <div className="border-r border-black p-2 font-bold">Mobile No.</div>
+                      <div className="p-2">{receiptData.mobile}</div>
+                    </div>
+                  )}
+                  {receiptData.customer_address && (
+                    <div className="grid grid-cols-2 border-t border-black">
+                      <div className="border-r border-black p-2 font-bold">Address</div>
+                      <div className="p-2">{receiptData.customer_address}</div>
+                    </div>
+                  )}
+                  {receiptData.customer_gst_number && (
+                    <div className="grid grid-cols-2 border-t border-black">
+                      <div className="border-r border-black p-2 font-bold">GSTIN Number</div>
+                      <div className="p-2">{receiptData.customer_gst_number}</div>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div className="grid grid-cols-2 h-full">
+                    <div className="border-r border-black p-2 font-bold">Bill No.</div>
+                    <div className="p-2">{receiptData.number}</div>
+                    <div className="border-r border-black border-t border-black p-2 font-bold">Date</div>
+                    <div className="border-t border-black p-2">{new Date(receiptData.date || Date.now()).toLocaleDateString()}, {new Date(receiptData.date || Date.now()).toLocaleTimeString()}</div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Items Table */}
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b border-black">
+                    <th className="border-r border-black p-2 text-left">Sr. No.</th>
+                    <th className="border-r border-black p-2 text-left">Item</th>
+                    <th className="border-r border-black p-2 text-center">Qty</th>
+                    <th className="border-r border-black p-2 text-right">Rate</th>
+                    <th className="p-2 text-right">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {receiptData.items.map((item: any, index: number) => (
+                    <tr key={index} className="border-b border-black">
+                      <td className="border-r border-black p-2">{index + 1}</td>
+                      <td className="border-r border-black p-2">{item.category_name}</td>
+                      <td className="border-r border-black p-2 text-center">{item.quantity}</td>
+                      <td className="border-r border-black p-2 text-right">₹ {(item.sale_price ?? 0).toFixed(0)}</td>
+                      <td className="p-2 text-right">₹ {(item.item_final_price ?? 0).toFixed(0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              
+              {/* Totals Section */}
+              <div className="grid grid-cols-2">
+                <div>
+                  <div className="grid grid-cols-2 border-b border-black">
+                    <div className="border-r border-black p-2 text-center font-bold">SGST @ 2.5%</div>
+                    <div className="p-2 text-center">₹ {(receiptData.final_amount * 0.023881).toFixed(2)}</div>
+                  </div>
+                  <div className="grid grid-cols-2">
+                    <div className="border-r border-black p-2 text-center font-bold">CGST @ 2.5%</div>
+                    <div className="p-2 text-center">₹ {(receiptData.final_amount * 0.023881).toFixed(2)}</div>
+                  </div>
+                </div>
+                <div className="border-l border-black">
+                  <div className="grid grid-cols-2 border-b border-black">
+                    <div className="border-r border-black p-2 text-right font-bold">Total</div>
+                    <div className="p-2 text-right">₹ {receiptData.total_amount.toFixed(0)}</div>
+                  </div>
+                  {receiptData.total_discount > 0 && (
+                    <div className="grid grid-cols-2 border-b border-black">
+                      <div className="border-r border-black p-2 text-right font-bold">Total Discount</div>
+                      <div className="p-2 text-right">₹ {receiptData.total_discount.toFixed(0)}</div>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2">
+                    <div className="border-r border-black p-2 text-right font-bold">Grand Total (incl taxes)</div>
+                    <div className="p-2 text-right">₹ {receiptData.final_amount.toFixed(0)}</div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Footer */}
+              <div className="grid grid-cols-2 border-t border-black">
+                <div className="border-r border-black p-2">
+                  <div className="text-center">Thank you for shopping.</div>
+                  <div className="text-center text-sm">(Goods once sold will not be taken back.)</div>
+                </div>
+                <div className="p-2 text-center">
+                  <div>Auth. Signatory</div>
+                </div>
+              </div>
+            </div>
           ) : (
+            // Existing Estimate Format
             <div>
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
@@ -587,6 +745,18 @@ const NewSale = () => {
                   <div>
                     <p className="text-sm text-gray-500">Mobile</p>
                     <p className="font-medium">{receiptData.mobile}</p>
+                  </div>
+                )}
+                {receiptData.customer_address && (
+                  <div>
+                    <p className="text-sm text-gray-500">Address</p>
+                    <p className="font-medium">{receiptData.customer_address}</p>
+                  </div>
+                )}
+                {receiptData.customer_gst_number && (
+                  <div>
+                    <p className="text-sm text-gray-500">GSTIN Number</p>
+                    <p className="font-medium">{receiptData.customer_gst_number}</p>
                   </div>
                 )}
                 {receiptData.payment_mode && (
@@ -642,18 +812,18 @@ const NewSale = () => {
                   <span>₹{receiptData.final_amount.toFixed(2)}</span>
                 </div>
               </div>
-              
-              <div className="mt-6 flex justify-end gap-2 print:hidden">
-                <Button onClick={handleCloseReceipt} variant="outline">
-                  Close
-                </Button>
-                <Button onClick={handlePrint} className="flex items-center gap-1">
-                  <Printer size={16} />
-                  Print
-                </Button>
-              </div>
             </div>
           )}
+          
+          <div className="mt-6 flex justify-end gap-2 print:hidden">
+            <Button onClick={handleCloseReceipt} variant="outline">
+              Close
+            </Button>
+            <Button onClick={handlePrint} className="flex items-center gap-1">
+              <Printer size={16} />
+              Print
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </Layout>
