@@ -7,27 +7,10 @@ import Layout from '@/components/Layout';
 import Card from '@/components/Card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { CalendarIcon, Eye, Download, Edit3, Save, X, Plus, Minus } from 'lucide-react';
-import { getSalesApi, exportSalesApi, getSaleByIdApi, updateSaleApi, SaleItem } from '@/lib/api';
-
-interface SaleDetail {
-  id: number;
-  type: string;
-  number: string;
-  customer_name: string;
-  mobile: string | null;
-  payment_mode: string | null;
-  date: string;
-  total_amount: number;
-  total_discount: number;
-  final_amount: number;
-  remarks?: string | null;
-  items?: SaleItem[];
-}
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { getSalesApi, getSaleByIdApi, exportSalesApi, updateSaleApi, updateProductQuantityApi } from '@/lib/api';
+import { Search, Calendar, FileDown, X, Plus, Minus } from 'lucide-react';
 
 interface Sale {
   id: number;
@@ -40,54 +23,63 @@ interface Sale {
   total_amount: number;
   total_discount: number;
   final_amount: number;
-  remarks?: string | null;
+}
+
+interface SaleItem {
+  id: number;
+  product_id: number;
+  barcode: string;
+  category_name: string;
+  sale_price: number;
+  quantity: number;
+  item_final_price: number;
+}
+
+interface SaleDetail extends Sale {
+  remarks: string | null;
+  items: SaleItem[];
 }
 
 const SalesReport = () => {
   const queryClient = useQueryClient();
-  
+
   // Filter states
-  const [selectedDate, setSelectedDate] = useState<Date>();
-  const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
-  const [filterType, setFilterType] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState('all');
+  const [viewMode, setViewMode] = useState<'daily' | 'range'>('daily');
   
-  // Detail view states
+  // Details dialog state
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [selectedSaleId, setSelectedSaleId] = useState<number | null>(null);
-  const [isSheetOpen, setIsSheetOpen] = useState(false);
-  
-  // Edit mode states
-  const [isEditMode, setIsEditMode] = useState(false);
   const [editedItems, setEditedItems] = useState<SaleItem[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
   
-  // Fetch sales data
+  // Fetch sales
   const { data: sales = [], isLoading, refetch } = useQuery({
-    queryKey: ['sales', selectedDate, dateRange, filterType, searchQuery],
-    queryFn: async () => {
-      const params: any = {};
+    queryKey: ['sales', viewMode, dateFilter, startDate, endDate, activeTab, searchQuery],
+    queryFn: () => {
+      const params: Record<string, string> = {};
       
-      if (selectedDate) {
-        params.date = format(selectedDate, 'yyyy-MM-dd');
-      } else if (dateRange.from) {
-        params.startDate = format(dateRange.from, 'yyyy-MM-dd');
-        if (dateRange.to) {
-          params.endDate = format(dateRange.to, 'yyyy-MM-dd');
-        }
+      if (viewMode === 'daily') {
+        params.date = dateFilter;
+      } else if (viewMode === 'range' && startDate && endDate) {
+        params.startDate = startDate;
+        params.endDate = endDate;
       }
       
-      if (filterType && filterType !== 'all') {
-        params.type = filterType;
+      if (activeTab !== 'all') {
+        params.type = activeTab;
       }
       
       if (searchQuery) {
         params.search = searchQuery;
       }
       
-      console.log('Fetching sales with params:', params);
-      const result = await getSalesApi(params);
-      console.log('Sales API result:', result);
-      return result;
-    },
+      return getSalesApi(params);
+    }
   });
   
   // Fetch sale details
@@ -95,9 +87,9 @@ const SalesReport = () => {
     queryKey: ['sale', selectedSaleId],
     queryFn: async () => {
       if (!selectedSaleId) return null;
-      console.log('Viewing sale details for ID:', selectedSaleId);
-      const result = await getSaleByIdApi(selectedSaleId);
-      return result;
+      const data = await getSaleByIdApi(selectedSaleId);
+      console.log("Data received in queryFn:", data);
+      return data as SaleDetail;
     },
     enabled: !!selectedSaleId,
     staleTime: 0,
@@ -117,12 +109,14 @@ const SalesReport = () => {
   
   // Update sale mutation
   const updateSaleMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: any }) => updateSaleApi(id, data),
+    mutationFn: async ({ id, updatedSale }: { id: number, updatedSale: any }) => {
+      return updateSaleApi(id, updatedSale);
+    },
     onSuccess: () => {
       toast.success('Sale updated successfully');
-      setIsEditMode(false);
-      queryClient.invalidateQueries({ queryKey: ['sales'] });
       queryClient.invalidateQueries({ queryKey: ['sale', selectedSaleId] });
+      queryClient.invalidateQueries({ queryKey: ['sales'] });
+      setIsEditing(false);
     },
     onError: (error) => {
       console.error('Error updating sale:', error);
@@ -130,29 +124,34 @@ const SalesReport = () => {
     }
   });
   
-  // Handle view details
-  const handleViewDetails = (saleId: number) => {
-    console.log('Opening details for sale ID:', saleId);
-    setSelectedSaleId(saleId);
-    setIsSheetOpen(true);
-    setIsEditMode(false);
+  // Update quantity mutation
+  const updateQuantityMutation = useMutation({
+    mutationFn: ({ id, quantity }: { id: number, quantity: number }) => {
+      return updateProductQuantityApi(id, quantity);
+    }
+  });
+  
+  // Handle view sale details
+  const handleViewDetails = (id: number) => {
+    console.log('Viewing sale details for ID:', id);
+    setSelectedSaleId(id);
+    setIsDetailsOpen(true);
+    setIsEditing(false);
   };
   
   // Handle export
   const handleExport = () => {
-    const params: any = {};
+    const params: Record<string, string> = {};
     
-    if (selectedDate) {
-      params.date = format(selectedDate, 'yyyy-MM-dd');
-    } else if (dateRange.from) {
-      params.startDate = format(dateRange.from, 'yyyy-MM-dd');
-      if (dateRange.to) {
-        params.endDate = format(dateRange.to, 'yyyy-MM-dd');
-      }
+    if (viewMode === 'daily') {
+      params.date = dateFilter;
+    } else if (viewMode === 'range' && startDate && endDate) {
+      params.startDate = startDate;
+      params.endDate = endDate;
     }
     
-    if (filterType && filterType !== 'all') {
-      params.type = filterType;
+    if (activeTab !== 'all') {
+      params.type = activeTab;
     }
     
     if (searchQuery) {
@@ -160,209 +159,297 @@ const SalesReport = () => {
     }
     
     exportSalesApi(params);
-    toast.success('Export started. Download will begin shortly.');
+    toast.success('Exporting sales report');
   };
   
-  // Handle edit mode toggle
-  const handleEditToggle = () => {
-    if (isEditMode) {
-      // Reset to original items if canceling edit
-      if (saleDetail && saleDetail.items) {
-        setEditedItems(saleDetail.items);
-      }
-    }
-    setIsEditMode(!isEditMode);
+  // Format date
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return format(date, 'dd/MM/yyyy hh:mm a');
   };
-  
-  // Handle save changes
-  const handleSaveChanges = () => {
-    if (!selectedSaleId || !editedItems.length) return;
-    
-    const totalAmount = editedItems.reduce((sum, item) => sum + item.item_final_price, 0);
-    const totalDiscount = saleDetail?.total_discount || 0;
-    
-    updateSaleMutation.mutate({
-      id: selectedSaleId,
-      data: {
-        total_amount: totalAmount,
-        total_discount: totalDiscount,
-        final_amount: totalAmount - totalDiscount,
-        items: editedItems
-      }
-    });
+
+  // Calculate totals
+  const getTotalAmount = () => {
+    return sales
+      .reduce((sum: number, sale: Sale) => sum + sale.final_amount, 0)
+      .toFixed(2);
   };
-  
-  // Handle item quantity update
-  const updateItemQuantity = (index: number, newQuantity: number) => {
-    if (newQuantity < 1) return;
+
+  // Handle update item quantity
+  const handleUpdateItemQuantity = (index: number, newQuantity: number) => {
+    if (!isEditing || newQuantity < 0) return;
+
+    const updatedItems = [...editedItems];
+    const item = updatedItems[index];
+    const currentQuantity = item.quantity;
     
-    const updatedItems = editedItems.map((item, i) => {
-      if (i === index) {
-        const newFinalPrice = item.sale_price * newQuantity;
-        return {
-          ...item,
-          quantity: newQuantity,
-          item_final_price: newFinalPrice
-        };
-      }
-      return item;
-    });
+    // Update the item quantity
+    updatedItems[index] = {
+      ...item,
+      quantity: newQuantity,
+      item_final_price: item.sale_price * newQuantity
+    };
     
     setEditedItems(updatedItems);
   };
-  
-  // Calculate totals for display
-  const calculateTotals = () => {
-    if (!saleDetail) return { totalDiscount: 0, finalAmount: 0 };
+
+  // Handle remove item
+  const handleRemoveItem = (index: number) => {
+    if (!isEditing) return;
     
-    const totalDiscount = saleDetail.total_discount || 0;
-    const finalAmount = saleDetail.final_amount || 0;
-    
-    return { totalDiscount, finalAmount };
+    const updatedItems = [...editedItems];
+    updatedItems.splice(index, 1);
+    setEditedItems(updatedItems);
   };
-  
-  const { totalDiscount, finalAmount } = calculateTotals();
+
+  // Calculate totals for edited items
+  const calculateEditedTotals = () => {
+    const total = editedItems.reduce((sum, item) => sum + item.item_final_price, 0);
+    const discount = saleDetail ? saleDetail.total_discount : 0;
+    const final = total - discount;
+    
+    return { total, discount, final };
+  };
+
+  // Handle save changes
+  const handleSaveChanges = async () => {
+    if (!saleDetail || !selectedSaleId) return;
+    
+    const { total, discount, final } = calculateEditedTotals();
+    
+    // Prepare updated item quantities for inventory
+    const originalItems = saleDetail.items;
+    const quantityUpdates: { productId: number, diff: number }[] = [];
+    
+    // Find items with changed quantities
+    editedItems.forEach(editedItem => {
+      const originalItem = originalItems.find(oi => oi.product_id === editedItem.product_id);
+      if (originalItem) {
+        const diff = originalItem.quantity - editedItem.quantity;
+        if (diff !== 0) {
+          quantityUpdates.push({ productId: editedItem.product_id, diff });
+        }
+      }
+    });
+    
+    // Find removed items that need to be returned to inventory
+    originalItems.forEach(originalItem => {
+      const stillExists = editedItems.some(ei => ei.product_id === originalItem.product_id);
+      if (!stillExists) {
+        quantityUpdates.push({ productId: originalItem.product_id, diff: originalItem.quantity });
+      }
+    });
+    
+    // Update the sale
+    await updateSaleMutation.mutateAsync({
+      id: selectedSaleId,
+      updatedSale: {
+        total_amount: total,
+        total_discount: discount,
+        final_amount: final,
+        items: editedItems
+      }
+    });
+    
+    // Update inventory quantities
+    for (const update of quantityUpdates) {
+      try {
+        await updateQuantityMutation.mutateAsync({
+          id: update.productId,
+          quantity: update.diff
+        });
+      } catch (error) {
+        console.error(`Failed to update inventory for product ${update.productId}:`, error);
+        toast.error(`Failed to update inventory for one of the products`);
+      }
+    }
+  };
   
   return (
     <Layout>
       <Card title="Sales Report">
-        {/* Filters */}
-        <div className="mb-6 grid md:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Date</label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="w-full justify-start text-left font-normal">
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {selectedDate ? format(selectedDate, 'dd/MM/yyyy') : 'Select date'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <Calendar
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={setSelectedDate}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as 'daily' | 'range')} className="flex-grow">
+            <TabsList>
+              <TabsTrigger value="daily">Daily</TabsTrigger>
+              <TabsTrigger value="range">Date Range</TabsTrigger>
+            </TabsList>
+            
+            <div className="mt-2">
+              {viewMode === 'daily' ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={dateFilter}
+                    onChange={(e) => setDateFilter(e.target.value)}
+                    className="w-auto"
+                  />
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-auto"
+                    placeholder="Start Date"
+                  />
+                  <span>to</span>
+                  <Input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-auto"
+                    placeholder="End Date"
+                  />
+                </div>
+              )}
+            </div>
+          </Tabs>
           
-          <div>
-            <label className="block text-sm font-medium mb-1">Type</label>
-            <Select value={filterType} onValueChange={setFilterType}>
-              <SelectTrigger>
-                <SelectValue placeholder="All types" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All types</SelectItem>
-                <SelectItem value="bill">Bills</SelectItem>
-                <SelectItem value="estimate">Estimates</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium mb-1">Search</label>
-            <Input
-              placeholder="Search by customer name..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-          
-          <div className="flex items-end">
-            <Button onClick={handleExport} variant="outline" className="w-full">
-              <Download size={16} className="mr-2" />
-              Export
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
+              <Input
+                placeholder="Search by name or mobile..."
+                className="pl-8"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            
+            <Button onClick={handleExport} className="flex items-center gap-1">
+              <FileDown size={16} />
+              Export Excel
             </Button>
           </div>
         </div>
         
-        {/* Sales Table */}
-        <div className="border rounded-lg overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-2 text-left">Type</th>
-                <th className="px-4 py-2 text-left">Number</th>
-                <th className="px-4 py-2 text-left">Customer</th>
-                <th className="px-4 py-2 text-left">Date</th>
-                <th className="px-4 py-2 text-right">Amount</th>
-                <th className="px-4 py-2 text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
-                    Loading...
-                  </td>
-                </tr>
-              ) : sales.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
-                    No sales found
-                  </td>
-                </tr>
-              ) : (
-                sales.map((sale: Sale) => (
-                  <tr key={sale.id} className="border-t">
-                    <td className="px-4 py-2">
-                      <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                        sale.type === 'bill' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-blue-100 text-blue-800'
-                      }`}>
-                        {sale.type.toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 font-medium">{sale.number}</td>
-                    <td className="px-4 py-2">{sale.customer_name}</td>
-                    <td className="px-4 py-2">{format(new Date(sale.date), 'dd/MM/yyyy')}</td>
-                    <td className="px-4 py-2 text-right">₹{sale.final_amount.toFixed(2)}</td>
-                    <td className="px-4 py-2 text-center">
-                      <Button
-                        size="sm"
-                        variant="outline"
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
+          <div className="flex justify-between items-center">
+            <TabsList>
+              <TabsTrigger value="all">All</TabsTrigger>
+              <TabsTrigger value="bill">Bills</TabsTrigger>
+              <TabsTrigger value="estimate">Estimates</TabsTrigger>
+            </TabsList>
+            
+            <div className="text-sm">
+              <span className="mr-4">
+                {sales.length} transaction{sales.length !== 1 ? 's' : ''}
+              </span>
+              <span className="font-medium">
+                Total: ₹{getTotalAmount()}
+              </span>
+            </div>
+          </div>
+          
+          <TabsContent value={activeTab} className="pt-4">
+            <div className="border rounded overflow-hidden">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-2 text-left">Date</th>
+                    <th className="px-4 py-2 text-left">Number</th>
+                    <th className="px-4 py-2 text-left">Type</th>
+                    <th className="px-4 py-2 text-left">Customer</th>
+                    <th className="px-4 py-2 text-right">Amount</th>
+                    <th className="px-4 py-2 text-center">Payment</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-4 text-center">Loading...</td>
+                    </tr>
+                  ) : sales.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-4 text-center">No sales found</td>
+                    </tr>
+                  ) : (
+                    sales.map((sale: Sale) => (
+                      <tr
+                        key={sale.id}
+                        className="border-t hover:bg-gray-50 cursor-pointer"
                         onClick={() => handleViewDetails(sale.id)}
                       >
-                        <Eye size={14} className="mr-1" />
-                        View
-                      </Button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                        <td className="px-4 py-3">
+                          <div>{formatDate(sale.date).split(' ')[0]}</div>
+                          <div className="text-xs text-gray-500">
+                            {formatDate(sale.date).split(' ').slice(1).join(' ')}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">{sale.number}</td>
+                        <td className="px-4 py-3">
+                          {sale.type === 'bill' ? (
+                            <span className="kala-tag-bill">Bill</span>
+                          ) : (
+                            <span className="kala-tag-estimate">Estimate</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div>{sale.customer_name}</div>
+                          {sale.mobile && (
+                            <div className="text-xs text-gray-500">{sale.mobile}</div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">₹{sale.final_amount.toFixed(2)}</td>
+                        <td className="px-4 py-3 text-center">
+                          {sale.payment_mode ? (
+                            <span className="capitalize">{sale.payment_mode}</span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </TabsContent>
+        </Tabs>
       </Card>
       
-      {/* Sale Details Sheet */}
-      <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>
-              {saleDetail?.type === 'bill' ? 'Bill' : 'Estimate'} Details
-            </SheetTitle>
-          </SheetHeader>
+      {/* Sale Details Dialog */}
+      <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader className="relative">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute right-0 top-0"
+              onClick={() => setIsDetailsOpen(false)}
+            >
+              <X size={16} />
+            </Button>
+            <DialogTitle>
+              {saleDetail ? (
+                <>
+                  {saleDetail.type === 'bill' ? 'Bill' : 'Estimate'} Details
+                </>
+              ) : (
+                'Sale Details'
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              Sale ID: {selectedSaleId}
+            </DialogDescription>
+          </DialogHeader>
           
-          {isLoadingDetails ? (
+          {isLoadingDetails || !saleDetail ? (
             <div className="py-8 text-center">Loading...</div>
-          ) : !saleDetail ? (
-            <div className="py-8 text-center text-gray-500">Sale not found</div>
           ) : (
-            <div className="space-y-6 mt-6">
-              {/* Sale Information */}
-              <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
-                  <p className="text-sm text-gray-500">{saleDetail.type === 'bill' ? 'Bill' : 'Estimate'} Number</p>
+                  <p className="text-sm text-gray-500">
+                    {saleDetail.type === 'bill' ? 'Bill' : 'Estimate'} Number
+                  </p>
                   <p className="font-medium">{saleDetail.number}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Date</p>
-                  <p className="font-medium">{format(new Date(saleDetail.date), 'dd/MM/yyyy HH:mm')}</p>
+                  <p className="font-medium">{formatDate(saleDetail.date)}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Customer</p>
@@ -380,127 +467,145 @@ const SalesReport = () => {
                     <p className="font-medium capitalize">{saleDetail.payment_mode}</p>
                   </div>
                 )}
-                {saleDetail.remarks && (
-                  <div className="col-span-2">
-                    <p className="text-sm text-gray-500">Remarks</p>
-                    <p className="font-medium">{saleDetail.remarks}</p>
-                  </div>
-                )}
               </div>
               
-              {/* Items Section */}
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-medium">Items</h3>
-                  <Button
-                    size="sm"
-                    variant={isEditMode ? "outline" : "default"}
-                    onClick={handleEditToggle}
-                    className={isEditMode ? "" : "bg-blue-600 hover:bg-blue-700"}
-                  >
-                    {isEditMode ? (
-                      <>
-                        <X size={14} className="mr-1" />
-                        Cancel
-                      </>
-                    ) : (
-                      <>
-                        <Edit3 size={14} className="mr-1" />
-                        Edit Items
-                      </>
-                    )}
-                  </Button>
+              {saleDetail.remarks && (
+                <div className="mb-4">
+                  <p className="text-sm text-gray-500">Remarks</p>
+                  <p className="bg-gray-50 p-2 rounded">{saleDetail.remarks}</p>
                 </div>
-                
-                {!saleDetail.items || saleDetail.items.length === 0 ? (
-                  <div className="text-center text-gray-500 py-4">No items found</div>
+              )}
+              
+              <div className="flex justify-between items-center mb-2">
+                <p className="font-medium">Items:</p>
+                {!isEditing ? (
+                  <Button onClick={() => setIsEditing(true)} variant="outline" size="sm">
+                    Edit Items
+                  </Button>
                 ) : (
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-2 text-left">Item</th>
-                          <th className="px-4 py-2 text-center">Qty</th>
-                          <th className="px-4 py-2 text-right">Rate</th>
-                          <th className="px-4 py-2 text-right">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {editedItems.map((item, index) => (
-                          <tr key={index} className="border-t">
-                            <td className="px-4 py-2">
-                              <div className="font-medium">{item.category_name}</div>
-                              <div className="text-xs text-gray-500">{item.barcode}</div>
-                            </td>
-                            <td className="px-4 py-2">
-                              {isEditMode ? (
-                                <div className="flex items-center justify-center space-x-1">
-                                  <button
-                                    type="button"
-                                    className="w-6 h-6 flex items-center justify-center rounded bg-gray-200"
-                                    onClick={() => updateItemQuantity(index, item.quantity - 1)}
-                                  >
-                                    <Minus size={12} />
-                                  </button>
-                                  <span className="text-center w-8">{item.quantity}</span>
-                                  <button
-                                    type="button"
-                                    className="w-6 h-6 flex items-center justify-center rounded bg-gray-200"
-                                    onClick={() => updateItemQuantity(index, item.quantity + 1)}
-                                  >
-                                    <Plus size={12} />
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="text-center">{item.quantity}</div>
-                              )}
-                            </td>
-                            <td className="px-4 py-2 text-right">₹{item.sale_price.toFixed(2)}</td>
-                            <td className="px-4 py-2 text-right">₹{item.item_final_price.toFixed(2)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-                
-                {isEditMode && (
-                  <div className="mt-4 flex justify-end">
-                    <Button 
-                      onClick={handleSaveChanges}
-                      disabled={updateSaleMutation.isPending}
-                      className="bg-blue-600 hover:bg-blue-700"
-                    >
-                      <Save size={14} className="mr-1" />
+                  <div className="flex gap-2">
+                    <Button onClick={() => setIsEditing(false)} variant="outline" size="sm">
+                      Cancel
+                    </Button>
+                    <Button onClick={handleSaveChanges} size="sm">
                       Save Changes
                     </Button>
                   </div>
                 )}
               </div>
               
-              {/* Totals */}
-              <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-                <div className="flex justify-between">
-                  <span>Total Amount:</span>
-                  <span>₹{saleDetail.total_amount.toFixed(2)}</span>
-                </div>
-                
-                {totalDiscount > 0 && (
-                  <div className="flex justify-between">
-                    <span>Total Discount:</span>
-                    <span>₹{totalDiscount.toFixed(2)}</span>
-                  </div>
+              <div className="border rounded overflow-hidden mb-4">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left">Item</th>
+                      <th className="px-4 py-2 text-center">Qty</th>
+                      <th className="px-4 py-2 text-right">Rate</th>
+                      <th className="px-4 py-2 text-right">Total</th>
+                      {isEditing && <th className="px-4 py-2 w-10"></th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {saleDetail.items && saleDetail.items.length > 0 ? (
+                      (isEditing ? editedItems : saleDetail.items).map((item, index) => (
+                        <tr key={item.id || index} className="border-t">
+                          <td className="px-4 py-2">
+                            <div className="font-medium">{item.category_name}</div>
+                          </td>
+                          <td className="px-4 py-2 text-center">
+                            {isEditing ? (
+                              <div className="flex items-center justify-center space-x-1">
+                                <button
+                                  type="button"
+                                  className="w-6 h-6 flex items-center justify-center rounded bg-gray-200"
+                                  onClick={() => handleUpdateItemQuantity(index, item.quantity - 1)}
+                                >
+                                  <Minus size={12} />
+                                </button>
+                                <span className="text-center w-6">{item.quantity}</span>
+                                <button
+                                  type="button"
+                                  className="w-6 h-6 flex items-center justify-center rounded bg-gray-200"
+                                  onClick={() => handleUpdateItemQuantity(index, item.quantity + 1)}
+                                >
+                                  <Plus size={12} />
+                                </button>
+                              </div>
+                            ) : (
+                              item.quantity
+                            )}
+                          </td>
+                          <td className="px-4 py-2 text-right">₹{item.sale_price.toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">₹{item.item_final_price.toFixed(2)}</td>
+                          {isEditing && (
+                            <td className="px-4 py-2">
+                              <button
+                                type="button"
+                                className="p-1 text-gray-500 hover:text-red-500"
+                                onClick={() => handleRemoveItem(index)}
+                              >
+                                <X size={16} />
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={isEditing ? 5 : 4} className="px-4 py-4 text-center">
+                          No items found
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              
+              <div className="bg-gray-50 p-4 rounded">
+                {isEditing ? (
+                  <>
+                    <div className="flex justify-between mb-1">
+                      <span>Total:</span>
+                      <span>₹{calculateEditedTotals().total.toFixed(2)}</span>
+                    </div>
+                    
+                    {saleDetail.total_discount > 0 && (
+                      <div className="flex justify-between mb-1">
+                        <span>Discount:</span>
+                        <span>₹{saleDetail.total_discount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    
+                    <div className="flex justify-between font-medium">
+                      <span>Final Amount:</span>
+                      <span>₹{calculateEditedTotals().final.toFixed(2)}</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex justify-between mb-1">
+                      <span>Total:</span>
+                      <span>₹{saleDetail.total_amount.toFixed(2)}</span>
+                    </div>
+                    
+                    {saleDetail.total_discount > 0 && (
+                      <div className="flex justify-between mb-1">
+                        <span>Discount:</span>
+                        <span>₹{saleDetail.total_discount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    
+                    <div className="flex justify-between font-medium">
+                      <span>Final Amount:</span>
+                      <span>₹{saleDetail.final_amount.toFixed(2)}</span>
+                    </div>
+                  </>
                 )}
-                
-                <div className="flex justify-between font-medium text-lg border-t pt-2">
-                  <span>Final Amount:</span>
-                  <span>₹{finalAmount.toFixed(2)}</span>
-                </div>
               </div>
             </div>
           )}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 };

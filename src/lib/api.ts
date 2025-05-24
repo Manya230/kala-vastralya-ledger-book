@@ -132,8 +132,6 @@ export const createSaleApi = async (sale: {
   type: string;
   customer_name?: string;
   mobile?: string;
-  customer_address?: string;
-  customer_gstin?: string;
   payment_mode?: string;
   remarks?: string;
   total_amount: number;
