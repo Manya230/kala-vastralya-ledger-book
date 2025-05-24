@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
@@ -23,6 +22,8 @@ interface Sale {
   total_amount: number;
   total_discount: number;
   final_amount: number;
+  customer_address?: string | null;
+  customer_gstin?: string | null;
 }
 
 interface SaleItem {
@@ -265,6 +266,13 @@ const SalesReport = () => {
     }
   };
   
+  // Calculate SGST and CGST
+  const calculateTaxes = (grandTotal: number) => {
+    const sgst = grandTotal * 0.023881;
+    const cgst = grandTotal * 0.023881;
+    return { sgst, cgst };
+  };
+
   return (
     <Layout>
       <Card title="Sales Report">
@@ -461,6 +469,18 @@ const SalesReport = () => {
                     <p className="font-medium">{saleDetail.mobile}</p>
                   </div>
                 )}
+                {saleDetail.customer_address && (
+                  <div>
+                    <p className="text-sm text-gray-500">Address</p>
+                    <p className="font-medium">{saleDetail.customer_address}</p>
+                  </div>
+                )}
+                {saleDetail.customer_gstin && (
+                  <div>
+                    <p className="text-sm text-gray-500">GSTIN</p>
+                    <p className="font-medium">{saleDetail.customer_gstin}</p>
+                  </div>
+                )}
                 {saleDetail.payment_mode && (
                   <div>
                     <p className="text-sm text-gray-500">Payment Mode</p>
@@ -501,7 +521,7 @@ const SalesReport = () => {
                       <th className="px-4 py-2 text-left">Item</th>
                       <th className="px-4 py-2 text-center">Qty</th>
                       <th className="px-4 py-2 text-right">Rate</th>
-                      <th className="px-4 py-2 text-right">Total</th>
+                      <th className="px-4 py-2 text-right">Amount</th>
                       {isEditing && <th className="px-4 py-2 w-10"></th>}
                     </tr>
                   </thead>
@@ -571,13 +591,26 @@ const SalesReport = () => {
                     
                     {saleDetail.total_discount > 0 && (
                       <div className="flex justify-between mb-1">
-                        <span>Discount:</span>
+                        <span>Total Discount:</span>
                         <span>₹{saleDetail.total_discount.toFixed(2)}</span>
                       </div>
                     )}
                     
+                    {saleDetail.type === 'bill' && (
+                      <>
+                        <div className="flex justify-between mb-1">
+                          <span>SGST:</span>
+                          <span>₹{calculateTaxes(calculateEditedTotals().final).sgst.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between mb-1">
+                          <span>CGST:</span>
+                          <span>₹{calculateTaxes(calculateEditedTotals().final).cgst.toFixed(2)}</span>
+                        </div>
+                      </>
+                    )}
+                    
                     <div className="flex justify-between font-medium">
-                      <span>Final Amount:</span>
+                      <span>Grand Total(incl taxes):</span>
                       <span>₹{calculateEditedTotals().final.toFixed(2)}</span>
                     </div>
                   </>
@@ -590,13 +623,26 @@ const SalesReport = () => {
                     
                     {saleDetail.total_discount > 0 && (
                       <div className="flex justify-between mb-1">
-                        <span>Discount:</span>
+                        <span>Total Discount:</span>
                         <span>₹{saleDetail.total_discount.toFixed(2)}</span>
                       </div>
                     )}
                     
+                    {saleDetail.type === 'bill' && (
+                      <>
+                        <div className="flex justify-between mb-1">
+                          <span>SGST:</span>
+                          <span>₹{calculateTaxes(saleDetail.final_amount).sgst.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between mb-1">
+                          <span>CGST:</span>
+                          <span>₹{calculateTaxes(saleDetail.final_amount).cgst.toFixed(2)}</span>
+                        </div>
+                      </>
+                    )}
+                    
                     <div className="flex justify-between font-medium">
-                      <span>Final Amount:</span>
+                      <span>Grand Total(incl taxes):</span>
                       <span>₹{saleDetail.final_amount.toFixed(2)}</span>
                     </div>
                   </>
