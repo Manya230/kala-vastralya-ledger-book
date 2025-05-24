@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -27,7 +26,7 @@ const NewSale = () => {
   const [customerName, setCustomerName] = useState('');
   const [mobileNumber, setMobileNumber] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
-  const [customerGstin, setCustomerGstin] = useState('');
+  const [customerGstNumber, setCustomerGstNumber] = useState('');
   const [barcode, setBarcode] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [paymentMode, setPaymentMode] = useState<string | undefined>(undefined);
@@ -53,6 +52,15 @@ const NewSale = () => {
     setDiscount(totalDiscountAmount);
     setFinalAmount(total - totalDiscountAmount);
   }, [cartItems]);
+  
+  // Effect to update discount when final amount changes
+  useEffect(() => {
+    // Only update the final amount if discount is manually changed (not from item discounts)
+    const calculatedDiscount = totalAmount - finalAmount;
+    if (calculatedDiscount !== discount) {
+      setDiscount(calculatedDiscount >= 0 ? calculatedDiscount : 0);
+    }
+  }, [finalAmount, totalAmount]);
   
   // Handle product data success
   const handleProductSuccess = useCallback((data: any) => {
@@ -87,7 +95,7 @@ const NewSale = () => {
           return {
             ...item,
             quantity: newQuantity,
-            item_final_price: updatedPrice - discount_amount,
+            item_final_price: updatedPrice,
             discount_amount: discount_amount
           };
         }
@@ -118,7 +126,13 @@ const NewSale = () => {
   const { refetch: searchProduct } = useQuery({
     queryKey: ['product', barcode],
     queryFn: () => getProductByBarcodeApi(barcode),
-    enabled: false
+    enabled: false,
+    meta: {
+      onSuccess: handleProductSuccess,
+      onError: () => {
+        toast.error('Product not found');
+      }
+    }
   });
   
   // Handle mobile number input
@@ -151,7 +165,7 @@ const NewSale = () => {
         customer_name: customerName,
         mobile: mobileNumber,
         customer_address: customerAddress,
-        customer_gstin: customerGstin,
+        customer_gst_number: customerGstNumber,
         payment_mode: paymentMode,
         items: cartItems.map(item => ({
           ...item,
@@ -211,7 +225,7 @@ const NewSale = () => {
           ...item,
           quantity: newQuantity,
           discount_amount: discountAmount,
-          item_final_price: updatedPrice - discountAmount
+          item_final_price: updatedPrice
         };
       }
       return item;
@@ -234,7 +248,7 @@ const NewSale = () => {
           ...item,
           discount_percent: limitedDiscount,
           discount_amount: discountAmount,
-          item_final_price: totalPrice - discountAmount
+          item_final_price: totalPrice // Keep the original amount, don't subtract discount
         };
       }
       return item;
@@ -259,8 +273,6 @@ const NewSale = () => {
       type,
       customer_name: customerName,
       mobile: mobileNumber,
-      customer_address: customerAddress,
-      customer_gstin: customerGstin,
       payment_mode: paymentMode,
       remarks,
       total_amount: totalAmount,
@@ -294,11 +306,6 @@ const NewSale = () => {
   const handleCloseReceipt = () => {
     setShowReceipt(false);
     navigate('/sales-report');
-  };
-  
-  // Calculate SGST and CGST for bill
-  const calculateTax = (amount: number) => {
-    return amount * 0.023881;
   };
   
   return (
@@ -338,23 +345,24 @@ const NewSale = () => {
                 <label htmlFor="customerAddress" className="block text-sm font-medium mb-1">
                   Address
                 </label>
-                <Input
+                <Textarea
                   id="customerAddress"
                   placeholder="Enter customer address"
                   value={customerAddress}
                   onChange={(e) => setCustomerAddress(e.target.value)}
+                  rows={2}
                 />
               </div>
               
               <div>
-                <label htmlFor="customerGstin" className="block text-sm font-medium mb-1">
+                <label htmlFor="customerGstNumber" className="block text-sm font-medium mb-1">
                   GSTIN Number
                 </label>
                 <Input
-                  id="customerGstin"
+                  id="customerGstNumber"
                   placeholder="Enter GSTIN number"
-                  value={customerGstin}
-                  onChange={(e) => setCustomerGstin(e.target.value)}
+                  value={customerGstNumber}
+                  onChange={(e) => setCustomerGstNumber(e.target.value)}
                 />
               </div>
             </div>
@@ -492,7 +500,7 @@ const NewSale = () => {
                             className="h-7 w-14 text-right"
                           />%
                         </td>
-                        <td className="px-4 py-2 text-right">₹{(item.sale_price * item.quantity).toFixed(2)}</td>
+                        <td className="px-4 py-2 text-right">₹{(item.item_final_price ?? 0).toFixed(2)}</td>
                         <td className="px-2 py-2">
                           <button
                             type="button"
@@ -518,7 +526,7 @@ const NewSale = () => {
                       <Input
                         type="number"
                         min="0"
-                        step="0.5"
+                        step="1"
                         value={discount}
                         onChange={handleDiscountChange}
                         className="h-7 text-right"
@@ -566,7 +574,7 @@ const NewSale = () => {
       
       {/* Receipt Dialog */}
       <Dialog open={showReceipt} onOpenChange={setShowReceipt}>
-        <DialogContent className="max-w-3xl print:shadow-none print:border-none print:max-w-full print:m-0 print:p-2">
+        <DialogContent className="max-w-3xl print:shadow-none print:border-none print:max-w-full">
           <DialogHeader className="relative print:mb-4">
             <Button
               variant="ghost"
@@ -578,19 +586,7 @@ const NewSale = () => {
             </Button>
             <DialogTitle className="text-center">
               {receiptType === 'bill' ? (
-                <div>
-                  <div className="text-2xl font-bold mb-4 print:text-3xl">BILL</div>
-                  <div className="flex justify-between items-center border-b pb-2 mb-4">
-                    <div className="text-sm">
-                      Mob 9053555965, 04169930965
-                    </div>
-                    <div className="text-sm">
-                      GSTIN: 06AEBPY4971P1ZN
-                    </div>
-                  </div>
-                  <div className="text-2xl font-bold mb-4">KALAN VASTRALYA</div>
-                  <div className="text-sm mb-4">254B, Opp RJS Plaza, Pataudi Road, Haily Mandi</div>
-                </div>
+                <div className="text-xl font-bold">KALAN VASTRALYA</div>
               ) : (
                 <div>Estimate/Challan</div>
               )}
@@ -599,217 +595,235 @@ const NewSale = () => {
           
           {!receiptData ? (
             <div className="py-8 text-center">Loading...</div>
-          ) : (
-            <div className="print:mt-0">
-              {receiptType === 'bill' ? (
-                <div className="print:text-black">
-                  <div className="grid grid-cols-2 gap-4 mb-4 border p-4">
-                    <div>
-                      <div className="font-bold mb-2 text-center">Customer Details</div>
-                      <div className="mb-1">
-                        <span className="font-medium">Name:</span> {receiptData.customer_name}
-                      </div>
-                      {receiptData.mobile && (
-                        <div className="mb-1">
-                          <span className="font-medium">Mobile No.:</span> {receiptData.mobile}
-                        </div>
-                      )}
-                      {receiptData.customer_address && (
-                        <div className="mb-1">
-                          <span className="font-medium">Address:</span> {receiptData.customer_address}
-                        </div>
-                      )}
-                      {receiptData.customer_gstin && (
-                        <div className="mb-1">
-                          <span className="font-medium">GSTIN Number:</span> {receiptData.customer_gstin}
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      <div className="mb-1">
-                        <span className="font-medium">Bill No.:</span> {receiptData.number}
-                      </div>
-                      <div className="mb-1">
-                        <span className="font-medium">Date:</span> {new Date(receiptData.date || Date.now()).toLocaleDateString('en-IN')}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="border mb-4">
-                    <table className="w-full border-collapse">
-                      <thead>
-                        <tr className="border-b">
-                          <th className="border-r px-2 py-1 text-center">Sr. No.</th>
-                          <th className="border-r px-2 py-1 text-center">Item</th>
-                          <th className="border-r px-2 py-1 text-center">Qty</th>
-                          <th className="border-r px-2 py-1 text-center">Rate</th>
-                          <th className="px-2 py-1 text-center">Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {receiptData.items.map((item: any, index: number) => (
-                          <tr key={index} className="border-b">
-                            <td className="border-r px-2 py-1 text-center">{index + 1}</td>
-                            <td className="border-r px-2 py-1 text-center">{item.category_name}</td>
-                            <td className="border-r px-2 py-1 text-center">{item.quantity}</td>
-                            <td className="border-r px-2 py-1 text-center">₹ {(item.sale_price ?? 0).toFixed(0)}</td>
-                            <td className="px-2 py-1 text-center">₹ {(item.sale_price * item.quantity).toFixed(0)}</td>
-                          </tr>
-                        ))}
-                        <tr>
-                          <td className="border-r px-2 py-4"></td>
-                          <td className="border-r px-2 py-4"></td>
-                          <td className="border-r px-2 py-4"></td>
-                          <td className="border-r px-2 py-4"></td>
-                          <td className="px-2 py-4"></td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 border">
-                    <div className="p-2">
-                      <div className="border-b mb-2 pb-1">
-                        <div className="flex justify-between">
-                          <span>SGST @ 2.5 %</span>
-                          <span>₹ {calculateTax(receiptData.final_amount).toFixed(2)}</span>
-                        </div>
-                      </div>
-                      <div className="border-b pb-1">
-                        <div className="flex justify-between">
-                          <span>CGST @ 2.5 %</span>
-                          <span>₹ {calculateTax(receiptData.final_amount).toFixed(2)}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="p-2">
-                      <div className="flex justify-between mb-1">
-                        <span>Total</span>
-                        <span>₹ {receiptData.total_amount.toFixed(0)}</span>
-                      </div>
-                      {receiptData.total_discount > 0 && (
-                        <div className="flex justify-between mb-1">
-                          <span>Total Discount</span>
-                          <span>₹ {receiptData.total_discount.toFixed(0)}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between font-bold border-t pt-1">
-                        <span>Grand Total<br/>(incl taxes)</span>
-                        <span>₹ {receiptData.final_amount.toFixed(0)}</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 mt-4 text-sm">
-                    <div>
-                      Thank you for shopping.<br/>
-                      (Goods once sold will not be taken back.)
-                    </div>
-                    <div className="text-right">
-                      Auth. Signatory
-                    </div>
-                  </div>
+          ) : receiptType === 'bill' ? (
+            // Custom Bill Format
+            <div className="border border-black">
+              {/* Header */}
+              <div className="grid grid-cols-3 border-b border-black">
+                <div className="border-r border-black p-2">
+                  <div className="text-sm">Mob 9053555965, 0416930965</div>
                 </div>
-              ) : (
-                <div>
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div>
-                      <p className="text-sm text-gray-500">Estimate Number</p>
-                      <p className="font-medium">{receiptData.number}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Date</p>
-                      <p className="font-medium">{new Date(receiptData.date || Date.now()).toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Customer</p>
-                      <p className="font-medium">{receiptData.customer_name}</p>
-                    </div>
-                    {receiptData.mobile && (
-                      <div>
-                        <p className="text-sm text-gray-500">Mobile</p>
-                        <p className="font-medium">{receiptData.mobile}</p>
-                      </div>
-                    )}
-                    {receiptData.customer_address && (
-                      <div>
-                        <p className="text-sm text-gray-500">Address</p>
-                        <p className="font-medium">{receiptData.customer_address}</p>
-                      </div>
-                    )}
-                    {receiptData.customer_gstin && (
-                      <div>
-                        <p className="text-sm text-gray-500">GSTIN</p>
-                        <p className="font-medium">{receiptData.customer_gstin}</p>
-                      </div>
-                    )}
-                    {receiptData.payment_mode && (
-                      <div>
-                        <p className="text-sm text-gray-500">Payment Mode</p>
-                        <p className="font-medium capitalize">{receiptData.payment_mode}</p>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <p className="font-medium mb-2">Items:</p>
-                  <div className="border rounded overflow-hidden mb-4">
-                    <table className="w-full">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-2 text-left">Item</th>
-                          <th className="px-4 py-2 text-center">Qty</th>
-                          <th className="px-4 py-2 text-right">Rate</th>
-                          <th className="px-4 py-2 text-right">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {receiptData.items.map((item: any, index: number) => (
-                          <tr key={index} className="border-t">
-                            <td className="px-4 py-2">
-                              <div className="font-medium">{item.category_name}</div>
-                              <div className="text-xs text-gray-500">{item.barcode}</div>
-                            </td>
-                            <td className="px-4 py-2 text-center">{item.quantity}</td>
-                            <td className="px-4 py-2 text-right">₹{(item.sale_price ?? 0).toFixed(2)}</td>
-                            <td className="px-4 py-2 text-right">₹{(item.item_final_price ?? 0).toFixed(2)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  
-                  <div className="bg-gray-50 p-4 rounded">
-                    <div className="flex justify-between mb-1">
-                      <span>Total:</span>
-                      <span>₹{receiptData.total_amount.toFixed(2)}</span>
-                    </div>
-                    
-                    {receiptData.total_discount > 0 && (
-                      <div className="flex justify-between mb-1">
-                        <span>Total Discount:</span>
-                        <span>₹{receiptData.total_discount.toFixed(2)}</span>
-                      </div>
-                    )}
-                    
-                    <div className="flex justify-between font-medium">
-                      <span>Final Amount:</span>
-                      <span>₹{receiptData.final_amount.toFixed(2)}</span>
-                    </div>
-                  </div>
+                <div className="border-r border-black p-2 text-center">
+                  <div className="font-bold text-lg">BILL</div>
                 </div>
-              )}
+                <div className="p-2 text-right">
+                  <div className="text-sm">GSTIN: 06AEBPY4971P1ZN</div>
+                </div>
+              </div>
               
-              <div className="mt-6 flex justify-end gap-2 print:hidden">
-                <Button onClick={handleCloseReceipt} variant="outline">
-                  Close
-                </Button>
-                <Button onClick={handlePrint} className="flex items-center gap-1">
-                  <Printer size={16} />
-                  Print
-                </Button>
+              {/* Company Name */}
+              <div className="text-center border-b border-black p-2">
+                <div className="font-bold text-xl">KALAN VASTRALYA</div>
+              </div>
+              
+              {/* Address */}
+              <div className="text-center border-b border-black p-2">
+                <div className="text-sm">254B, Opp RJS Plaza, Pataudi Road, Haily Mandi</div>
+              </div>
+              
+              {/* Customer Details and Bill Info */}
+              <div className="grid grid-cols-2 border-b border-black">
+                <div className="border-r border-black">
+                  <div className="border-b border-black p-2 text-center font-bold">Customer Details</div>
+                  <div className="grid grid-cols-2">
+                    <div className="border-r border-black p-2 font-bold">Name</div>
+                    <div className="p-2">{receiptData.customer_name}</div>
+                  </div>
+                  {receiptData.mobile && (
+                    <div className="grid grid-cols-2 border-t border-black">
+                      <div className="border-r border-black p-2 font-bold">Mobile No.</div>
+                      <div className="p-2">{receiptData.mobile}</div>
+                    </div>
+                  )}
+                  {receiptData.customer_address && (
+                    <div className="grid grid-cols-2 border-t border-black">
+                      <div className="border-r border-black p-2 font-bold">Address</div>
+                      <div className="p-2">{receiptData.customer_address}</div>
+                    </div>
+                  )}
+                  {receiptData.customer_gst_number && (
+                    <div className="grid grid-cols-2 border-t border-black">
+                      <div className="border-r border-black p-2 font-bold">GSTIN Number</div>
+                      <div className="p-2">{receiptData.customer_gst_number}</div>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div className="grid grid-cols-2 h-full">
+                    <div className="border-r border-black p-2 font-bold">Bill No.</div>
+                    <div className="p-2">{receiptData.number}</div>
+                    <div className="border-r border-black border-t border-black p-2 font-bold">Date</div>
+                    <div className="border-t border-black p-2">{new Date(receiptData.date || Date.now()).toLocaleDateString()}, {new Date(receiptData.date || Date.now()).toLocaleTimeString()}</div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Items Table */}
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b border-black">
+                    <th className="border-r border-black p-2 text-left">Sr. No.</th>
+                    <th className="border-r border-black p-2 text-left">Item</th>
+                    <th className="border-r border-black p-2 text-center">Qty</th>
+                    <th className="border-r border-black p-2 text-right">Rate</th>
+                    <th className="p-2 text-right">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {receiptData.items.map((item: any, index: number) => (
+                    <tr key={index} className="border-b border-black">
+                      <td className="border-r border-black p-2">{index + 1}</td>
+                      <td className="border-r border-black p-2">{item.category_name}</td>
+                      <td className="border-r border-black p-2 text-center">{item.quantity}</td>
+                      <td className="border-r border-black p-2 text-right">₹ {(item.sale_price ?? 0).toFixed(0)}</td>
+                      <td className="p-2 text-right">₹ {(item.item_final_price ?? 0).toFixed(0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              
+              {/* Totals Section */}
+              <div className="grid grid-cols-2">
+                <div>
+                  <div className="grid grid-cols-2 border-b border-black">
+                    <div className="border-r border-black p-2 text-center font-bold">SGST @ 2.5%</div>
+                    <div className="p-2 text-center">₹ {(receiptData.final_amount * 0.023881).toFixed(2)}</div>
+                  </div>
+                  <div className="grid grid-cols-2">
+                    <div className="border-r border-black p-2 text-center font-bold">CGST @ 2.5%</div>
+                    <div className="p-2 text-center">₹ {(receiptData.final_amount * 0.023881).toFixed(2)}</div>
+                  </div>
+                </div>
+                <div className="border-l border-black">
+                  <div className="grid grid-cols-2 border-b border-black">
+                    <div className="border-r border-black p-2 text-right font-bold">Total</div>
+                    <div className="p-2 text-right">₹ {receiptData.total_amount.toFixed(0)}</div>
+                  </div>
+                  {receiptData.total_discount > 0 && (
+                    <div className="grid grid-cols-2 border-b border-black">
+                      <div className="border-r border-black p-2 text-right font-bold">Total Discount</div>
+                      <div className="p-2 text-right">₹ {receiptData.total_discount.toFixed(0)}</div>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2">
+                    <div className="border-r border-black p-2 text-right font-bold">Grand Total (incl taxes)</div>
+                    <div className="p-2 text-right">₹ {receiptData.final_amount.toFixed(0)}</div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Footer */}
+              <div className="grid grid-cols-2 border-t border-black">
+                <div className="border-r border-black p-2">
+                  <div className="text-center">Thank you for shopping.</div>
+                  <div className="text-center text-sm">(Goods once sold will not be taken back.)</div>
+                </div>
+                <div className="p-2 text-center">
+                  <div>Auth. Signatory</div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            // Existing Estimate Format
+            <div>
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <p className="text-sm text-gray-500">
+                    Estimate Number
+                  </p>
+                  <p className="font-medium">{receiptData.number}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Date</p>
+                  <p className="font-medium">{new Date(receiptData.date || Date.now()).toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Customer</p>
+                  <p className="font-medium">{receiptData.customer_name}</p>
+                </div>
+                {receiptData.mobile && (
+                  <div>
+                    <p className="text-sm text-gray-500">Mobile</p>
+                    <p className="font-medium">{receiptData.mobile}</p>
+                  </div>
+                )}
+                {receiptData.customer_address && (
+                  <div>
+                    <p className="text-sm text-gray-500">Address</p>
+                    <p className="font-medium">{receiptData.customer_address}</p>
+                  </div>
+                )}
+                {receiptData.customer_gst_number && (
+                  <div>
+                    <p className="text-sm text-gray-500">GSTIN Number</p>
+                    <p className="font-medium">{receiptData.customer_gst_number}</p>
+                  </div>
+                )}
+                {receiptData.payment_mode && (
+                  <div>
+                    <p className="text-sm text-gray-500">Payment Mode</p>
+                    <p className="font-medium capitalize">{receiptData.payment_mode}</p>
+                  </div>
+                )}
+              </div>
+              
+              <p className="font-medium mb-2">Items:</p>
+              <div className="border rounded overflow-hidden mb-4">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left">Item</th>
+                      <th className="px-4 py-2 text-center">Qty</th>
+                      <th className="px-4 py-2 text-right">Rate</th>
+                      <th className="px-4 py-2 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {receiptData.items.map((item: any, index: number) => (
+                      <tr key={index} className="border-t">
+                        <td className="px-4 py-2">
+                          <div className="font-medium">{item.category_name}</div>
+                          <div className="text-xs text-gray-500">{item.barcode}</div>
+                        </td>
+                        <td className="px-4 py-2 text-center">{item.quantity}</td>
+                        <td className="px-4 py-2 text-right">₹{(item.sale_price ?? 0).toFixed(2)}</td>
+                        <td className="px-4 py-2 text-right">₹{(item.item_final_price ?? 0).toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              <div className="bg-gray-50 p-4 rounded">
+                <div className="flex justify-between mb-1">
+                  <span>Total:</span>
+                  <span>₹{receiptData.total_amount.toFixed(2)}</span>
+                </div>
+                
+                {receiptData.total_discount > 0 && (
+                  <div className="flex justify-between mb-1">
+                    <span>Total Discount:</span>
+                    <span>₹{receiptData.total_discount.toFixed(2)}</span>
+                  </div>
+                )}
+                
+                <div className="flex justify-between font-medium">
+                  <span>Final Amount:</span>
+                  <span>₹{receiptData.final_amount.toFixed(2)}</span>
+                </div>
               </div>
             </div>
           )}
+          
+          <div className="mt-6 flex justify-end gap-2 print:hidden">
+            <Button onClick={handleCloseReceipt} variant="outline">
+              Close
+            </Button>
+            <Button onClick={handlePrint} className="flex items-center gap-1">
+              <Printer size={16} />
+              Print
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </Layout>

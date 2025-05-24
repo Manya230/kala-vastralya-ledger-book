@@ -1,4 +1,3 @@
-
 import { Link, useLocation } from "react-router-dom";
 import { Home, ShoppingCart, FileText } from "lucide-react";
 import { Inventory } from "@/components/icons/KalaIcons";
@@ -20,14 +19,14 @@ const Layout = ({ children }: LayoutProps) => {
       <header className="border-b py-4 px-6 bg-white">
         <div className="container mx-auto flex items-center justify-between">
           <h1 className="text-xl font-bold">
-            <Link to="/" className="text-kalan-blue">Kalan Vastralya</Link>
+            <Link to="/" className="text-kala-blue">Kala Vastralya</Link>
           </h1>
           
           <nav className="flex gap-2">
             <Link 
               to="/" 
               className={`flex items-center gap-1 px-3 py-1 rounded ${
-                isActive("/") ? "bg-kalan-blue text-white" : "text-gray-800 hover:bg-gray-100"
+                isActive("/") ? "bg-kala-blue text-white" : "text-gray-800 hover:bg-gray-100"
               }`}
             >
               <Home size={18} />
@@ -37,7 +36,7 @@ const Layout = ({ children }: LayoutProps) => {
             <Link 
               to="/new-sale" 
               className={`flex items-center gap-1 px-3 py-1 rounded ${
-                isActive("/new-sale") ? "bg-kalan-blue text-white" : "text-gray-800 hover:bg-gray-100"
+                isActive("/new-sale") ? "bg-kala-blue text-white" : "text-gray-800 hover:bg-gray-100"
               }`}
             >
               <ShoppingCart size={18} />
@@ -47,7 +46,7 @@ const Layout = ({ children }: LayoutProps) => {
             <Link 
               to="/inventory" 
               className={`flex items-center gap-1 px-3 py-1 rounded ${
-                isActive("/inventory") ? "bg-kalan-blue text-white" : "text-gray-800 hover:bg-gray-100"
+                isActive("/inventory") ? "bg-kala-blue text-white" : "text-gray-800 hover:bg-gray-100"
               }`}
             >
               <Inventory size={18} />
@@ -57,7 +56,7 @@ const Layout = ({ children }: LayoutProps) => {
             <Link 
               to="/sales-report" 
               className={`flex items-center gap-1 px-3 py-1 rounded ${
-                isActive("/sales-report") ? "bg-kalan-blue text-white" : "text-gray-800 hover:bg-gray-100"
+                isActive("/sales-report") ? "bg-kala-blue text-white" : "text-gray-800 hover:bg-gray-100"
               }`}
             >
               <FileText size={18} />
@@ -68,7 +67,7 @@ const Layout = ({ children }: LayoutProps) => {
       </header>
       
       {/* Main Content */}
-      <main className="flex-1 bg-kalan-light-blue">
+      <main className="flex-1 bg-kala-light-blue">
         <div className="container mx-auto p-6">
           {children}
         </div>

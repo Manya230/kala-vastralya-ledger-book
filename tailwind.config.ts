@@ -53,7 +53,7 @@ export default {
 					DEFAULT: 'hsl(var(--card))',
 					foreground: 'hsl(var(--card-foreground))'
 				},
-				kalan: {
+				kala: {
 					blue: '#1e3a8a',
 					'light-blue': '#e6ebf5',
 				}
