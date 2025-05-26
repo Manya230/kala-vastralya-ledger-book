@@ -8,8 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { getSalesApi, getSaleByIdApi, exportSalesApi, updateSaleApi, updateProductQuantityApi } from '@/lib/api';
-import { Search, Calendar, FileDown, X, Plus, Minus } from 'lucide-react';
+import { getSalesApi, getSaleByIdApi, exportSalesApi, updateSaleApi, updateProductQuantityApi, deleteSaleApi } from '@/lib/api';
+import { Search, Calendar, FileDown, X, Plus, Minus, Trash2 } from 'lucide-react';
 
 interface Sale {
   id: number;
@@ -57,6 +57,10 @@ const SalesReport = () => {
   const [selectedSaleId, setSelectedSaleId] = useState<number | null>(null);
   const [editedItems, setEditedItems] = useState<SaleItem[]>([]);
   const [isEditing, setIsEditing] = useState(false);
+  
+  // Delete confirmation state
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [saleToDelete, setSaleToDelete] = useState<Sale | null>(null);
   
   // Fetch sales
   const { data: sales = [], isLoading, refetch } = useQuery({
@@ -132,6 +136,38 @@ const SalesReport = () => {
     }
   });
   
+  // Delete sale mutation
+  const deleteSaleMutation = useMutation({
+    mutationFn: async (saleId: number) => {
+      // First get the sale details to restore inventory
+      const saleDetail = await getSaleByIdApi(saleId);
+      
+      // Restore inventory quantities for each item
+      if (saleDetail.items && saleDetail.items.length > 0) {
+        for (const item of saleDetail.items) {
+          try {
+            await updateProductQuantityApi(item.product_id, item.quantity);
+          } catch (error) {
+            console.error(`Failed to restore inventory for product ${item.product_id}:`, error);
+          }
+        }
+      }
+      
+      // Delete the sale
+      return deleteSaleApi(saleId);
+    },
+    onSuccess: () => {
+      toast.success('Sale deleted successfully');
+      queryClient.invalidateQueries({ queryKey: ['sales'] });
+      setIsDeleteDialogOpen(false);
+      setSaleToDelete(null);
+    },
+    onError: (error) => {
+      console.error('Error deleting sale:', error);
+      toast.error('Failed to delete sale');
+    }
+  });
+  
   // Handle view sale details
   const handleViewDetails = (id: number) => {
     console.log('Viewing sale details for ID:', id);
@@ -161,6 +197,19 @@ const SalesReport = () => {
     
     exportSalesApi(params);
     toast.success('Exporting sales report');
+  };
+  
+  // Handle delete sale
+  const handleDeleteSale = (sale: Sale) => {
+    setSaleToDelete(sale);
+    setIsDeleteDialogOpen(true);
+  };
+  
+  // Confirm delete
+  const confirmDelete = () => {
+    if (saleToDelete) {
+      deleteSaleMutation.mutate(saleToDelete.id);
+    }
   };
   
   // Format date
@@ -362,23 +411,23 @@ const SalesReport = () => {
                     <th className="px-4 py-2 text-left">Customer</th>
                     <th className="px-4 py-2 text-right">Amount</th>
                     <th className="px-4 py-2 text-center">Payment</th>
+                    <th className="px-4 py-2 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-4 text-center">Loading...</td>
+                      <td colSpan={7} className="px-4 py-4 text-center">Loading...</td>
                     </tr>
                   ) : sales.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-4 text-center">No sales found</td>
+                      <td colSpan={7} className="px-4 py-4 text-center">No sales found</td>
                     </tr>
                   ) : (
                     sales.map((sale: Sale) => (
                       <tr
                         key={sale.id}
-                        className="border-t hover:bg-gray-50 cursor-pointer"
-                        onClick={() => handleViewDetails(sale.id)}
+                        className="border-t hover:bg-gray-50"
                       >
                         <td className="px-4 py-3">
                           <div>{formatDate(sale.date).split(' ')[0]}</div>
@@ -407,6 +456,25 @@ const SalesReport = () => {
                           ) : (
                             <span className="text-gray-400">-</span>
                           )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex justify-center gap-1">
+                            <Button
+                              onClick={() => handleViewDetails(sale.id)}
+                              variant="outline"
+                              size="sm"
+                            >
+                              View
+                            </Button>
+                            <Button
+                              onClick={() => handleDeleteSale(sale)}
+                              variant="outline"
+                              size="sm"
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <Trash2 size={14} />
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -650,6 +718,36 @@ const SalesReport = () => {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+      
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {saleToDelete?.type === 'bill' ? 'Bill' : 'Estimate'}</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete {saleToDelete?.type === 'bill' ? 'bill' : 'estimate'} {saleToDelete?.number}? 
+              This action cannot be undone. The inventory quantities will be restored automatically.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(false)}
+              disabled={deleteSaleMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={deleteSaleMutation.isPending}
+            >
+              {deleteSaleMutation.isPending ? 'Deleting...' : 'Delete'}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </Layout>

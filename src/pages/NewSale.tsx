@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -43,6 +42,15 @@ const NewSale = () => {
   const [showReceipt, setShowReceipt] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
   const [receiptType, setReceiptType] = useState<'bill' | 'estimate'>('bill');
+  
+  // Fetch all products to check inventory
+  const { data: allProducts = [] } = useQuery({
+    queryKey: ['products'],
+    queryFn: async () => {
+      const response = await api.get('/products');
+      return response.data;
+    }
+  });
   
   // Effect to recalculate totals when cart changes
   useEffect(() => {
@@ -211,9 +219,29 @@ const NewSale = () => {
     }
   };
   
-  // Handle update item quantity
+  // Handle update item quantity with inventory validation
   const updateItemQuantity = (productId: number, newQuantity: number) => {
     if (newQuantity < 1) {
+      return;
+    }
+    
+    // Find the product in inventory to check available quantity
+    const product = allProducts.find(p => p.id === productId);
+    if (!product) {
+      toast.error('Product not found in inventory');
+      return;
+    }
+    
+    // Calculate how much quantity is already used by other cart items of the same product
+    const currentCartItem = cartItems.find(item => item.product_id === productId);
+    const otherCartQuantity = cartItems
+      .filter(item => item.product_id === productId && item !== currentCartItem)
+      .reduce((sum, item) => sum + item.quantity, 0);
+    
+    const availableQuantity = product.quantity - otherCartQuantity;
+    
+    if (newQuantity > availableQuantity) {
+      toast.error(`Only ${availableQuantity} items available in stock`);
       return;
     }
     
