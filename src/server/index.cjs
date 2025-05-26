@@ -927,6 +927,104 @@ app.put('/api/sales/:id', (req, res) => {
   }
 });
 
+// Delete a sale
+app.delete('/api/sales/:id', (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    db.serialize(() => {
+      db.run('BEGIN TRANSACTION');
+      
+      // Get the sale to be deleted
+      db.get('SELECT * FROM sales WHERE id = ?', [id], (err, sale) => {
+        if (err) {
+          console.error('Error fetching sale for deletion:', err);
+          db.run('ROLLBACK');
+          return res.status(500).json({ error: 'Failed to delete sale' });
+        }
+        
+        if (!sale) {
+          db.run('ROLLBACK');
+          return res.status(404).json({ error: 'Sale not found' });
+        }
+        
+        // Get all sale items to restore inventory
+        db.all('SELECT * FROM sale_items WHERE sale_id = ?', [id], (err, saleItems) => {
+          if (err) {
+            console.error('Error fetching sale items for deletion:', err);
+            db.run('ROLLBACK');
+            return res.status(500).json({ error: 'Failed to delete sale' });
+          }
+          
+          let restoredCount = 0;
+          let errors = false;
+          
+          // If no items to restore, just delete the sale
+          if (saleItems.length === 0) {
+            deleteSaleRecord();
+            return;
+          }
+          
+          // Restore inventory quantities for all items
+          saleItems.forEach((item) => {
+            db.run(`
+              UPDATE products
+              SET quantity = quantity + ?
+              WHERE id = ?
+            `, [item.quantity, item.product_id], function(err) {
+              if (err) {
+                console.error('Error restoring inventory:', err);
+                errors = true;
+              }
+              
+              restoredCount++;
+              if (restoredCount === saleItems.length) {
+                if (errors) {
+                  db.run('ROLLBACK');
+                  return res.status(500).json({ error: 'Failed to restore inventory' });
+                } else {
+                  deleteSaleRecord();
+                }
+              }
+            });
+          });
+          
+          function deleteSaleRecord() {
+            // Delete sale items first
+            db.run('DELETE FROM sale_items WHERE sale_id = ?', [id], function(err) {
+              if (err) {
+                console.error('Error deleting sale items:', err);
+                db.run('ROLLBACK');
+                return res.status(500).json({ error: 'Failed to delete sale' });
+              }
+              
+              // Delete the sale
+              db.run('DELETE FROM sales WHERE id = ?', [id], function(err) {
+                if (err) {
+                  console.error('Error deleting sale:', err);
+                  db.run('ROLLBACK');
+                  return res.status(500).json({ error: 'Failed to delete sale' });
+                }
+                
+                db.run('COMMIT', (err) => {
+                  if (err) {
+                    console.error('Error committing deletion transaction:', err);
+                    return res.status(500).json({ error: 'Failed to delete sale' });
+                  }
+                  res.json({ message: 'Sale deleted successfully' });
+                });
+              });
+            });
+          }
+        });
+      });
+    });
+  } catch (error) {
+    console.error('Error deleting sale:', error);
+    res.status(500).json({ error: 'Failed to delete sale' });
+  }
+});
+
 // --------------------------------
 // Excel Import/Export Routes
 // --------------------------------
