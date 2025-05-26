@@ -19,7 +19,7 @@ const Layout = ({ children }: LayoutProps) => {
       <header className="border-b py-4 px-6 bg-white">
         <div className="container mx-auto flex items-center justify-between">
           <h1 className="text-xl font-bold">
-            <Link to="/" className="text-kala-blue">Kala Vastralya</Link>
+            <Link to="/" className="text-kala-blue">Kalan Vastralya</Link>
           </h1>
           
           <nav className="flex gap-2">

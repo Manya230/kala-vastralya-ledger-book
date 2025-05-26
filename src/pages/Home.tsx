@@ -8,7 +8,7 @@ const Home = () => {
   return (
     <Layout>
       <div className="text-center mb-8 mt-4">
-        <h1 className="text-3xl font-bold text-kala-blue mb-2">Welcome to Kala Vastralya</h1>
+        <h1 className="text-3xl font-bold text-kala-blue mb-2">Welcome to Kalan Vastralya</h1>
         <p className="text-gray-600">Manage your inventory, create bills, and track sales all in one place.</p>
       </div>
       
