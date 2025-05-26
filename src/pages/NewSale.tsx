@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
@@ -49,13 +50,17 @@ const NewSale = () => {
   const [estimateNumber, setEstimateNumber] = useState('E-12345');
 
   // Fetch products
-  const { refetch: fetchProducts } = useQuery({
+  const { data: productsData, refetch: fetchProducts } = useQuery({
     queryKey: ['products'],
     queryFn: getProductsApi,
-    onSuccess: (data) => {
-      setProducts(data);
-    },
   });
+
+  // Update products state when data changes
+  useEffect(() => {
+    if (productsData) {
+      setProducts(productsData);
+    }
+  }, [productsData]);
 
   useEffect(() => {
     fetchProducts();
