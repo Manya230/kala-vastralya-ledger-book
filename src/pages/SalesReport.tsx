@@ -289,24 +289,24 @@ const SalesReport = () => {
     });
     
     // Update inventory quantities
-    for (const update of inventoryUpdates) {
-      try {
-        // Get current quantity first
-        const currentProduct = await fetch(`http://localhost:3001/api/products/${update.productId}`);
-        if (currentProduct.ok) {
-          const productData = await currentProduct.json();
-          const newQuantity = productData.quantity + update.quantityChange;
+    // for (const update of inventoryUpdates) {
+    //   try {
+    //     // Get current quantity first
+    //     const currentProduct = await fetch(`http://localhost:3001/api/products/${update.productId}`);
+    //     if (currentProduct.ok) {
+    //       const productData = await currentProduct.json();
+    //       const newQuantity = productData.quantity + update.quantityChange;
           
-          await updateQuantityMutation.mutateAsync({
-            id: update.productId,
-            quantity: newQuantity
-          });
-        }
-      } catch (error) {
-        console.error(`Failed to update inventory for product ${update.productId}:`, error);
-        toast.error(`Failed to update inventory for one of the products`);
-      }
-    }
+    //       await updateQuantityMutation.mutateAsync({
+    //         id: update.productId,
+    //         quantity: newQuantity
+    //       });
+    //     }
+    //   } catch (error) {
+    //     console.error(`Failed to update inventory for product ${update.productId}:`, error);
+    //     toast.error(`Failed to update inventory for one of the products`);
+    //   }
+    // }
   };
   
   // Calculate SGST and CGST

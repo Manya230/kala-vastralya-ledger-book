@@ -805,36 +805,60 @@ app.put('/api/sales/:id', (req, res) => {
             db.run('ROLLBACK');
             return res.status(500).json({ error: 'Failed to update sale' });
           }
-          
-          let restoredCount = 0;
-          
-          // If no original items, skip restoring inventory
-          if (originalItems.length === 0) {
+
+          // Calculate inventory changes for each product
+          const inventoryUpdates = [];
+          // For each original item, find the new quantity (if any)
+          originalItems.forEach(origItem => {
+            const editedItem = items.find(i => i.product_id === origItem.product_id);
+            if (editedItem) {
+              // If quantity changed, update by the difference
+              const diff = origItem.quantity - editedItem.quantity;
+              if (diff !== 0) {
+                inventoryUpdates.push({ product_id: origItem.product_id, quantityChange: diff });
+              }
+            } else {
+              // Item was removed, add back full quantity
+              inventoryUpdates.push({ product_id: origItem.product_id, quantityChange: origItem.quantity });
+            }
+          });
+          // New items added in edit
+          items.forEach(editedItem => {
+            const origItem = originalItems.find(i => i.product_id === editedItem.product_id);
+            if (!origItem) {
+              // New item, subtract its quantity
+              inventoryUpdates.push({ product_id: editedItem.product_id, quantityChange: -editedItem.quantity });
+            }
+          });
+
+          // Now update inventory for all changes
+          let updatedCount = 0;
+          let errors = false;
+          if (inventoryUpdates.length === 0) {
             updateSale();
             return;
           }
-          
-          // Restore inventory quantities for original items
-          originalItems.forEach((item, index) => {
+          inventoryUpdates.forEach(update => {
             db.run(`
               UPDATE products
               SET quantity = quantity + ?
               WHERE id = ?
-            `, [item.quantity, item.product_id], function(err) {
+            `, [update.quantityChange, update.product_id], function(err) {
               if (err) {
-                console.error('Error restoring inventory:', err);
-                db.run('ROLLBACK');
-                return res.status(500).json({ error: 'Failed to update sale' });
+                console.error('Error updating inventory:', err);
+                errors = true;
               }
-              
-              restoredCount++;
-              if (restoredCount === originalItems.length) {
-                // All original items processed, continue with update
+              updatedCount++;
+              if (updatedCount === inventoryUpdates.length) {
+                if (errors) {
+                  db.run('ROLLBACK');
+                  return res.status(500).json({ error: 'Failed to update inventory' });
+                }
                 updateSale();
               }
             });
           });
-          
+
           function updateSale() {
             // Update the sale
             db.run(`
@@ -856,9 +880,6 @@ app.put('/api/sales/:id', (req, res) => {
                   return res.status(500).json({ error: 'Failed to update sale' });
                 }
                 
-                let completedItems = 0;
-                let errors = false;
-                
                 // Insert updated sale items
                 if (items.length === 0) {
                   db.run('COMMIT');
@@ -867,6 +888,9 @@ app.put('/api/sales/:id', (req, res) => {
                     message: 'Sale updated successfully'
                   });
                 }
+                
+                let completedItems = 0;
+                let errors = false;
                 
                 items.forEach((item, index) => {
                   // Insert sale item
@@ -886,33 +910,19 @@ app.put('/api/sales/:id', (req, res) => {
                       console.error('Error inserting sale item:', err);
                       errors = true;
                     }
-                    
-                    // Update product quantity
-                    db.run(`
-                      UPDATE products 
-                      SET quantity = quantity - ? 
-                      WHERE id = ?
-                    `, [item.quantity, item.product_id], function(err) {
-                      if (err) {
-                        console.error('Error updating product quantity:', err);
-                        errors = true;
+                    completedItems++;
+                    if (completedItems === items.length) {
+                      if (errors) {
+                        db.run('ROLLBACK');
+                        return res.status(500).json({ error: 'Failed to update sale' });
+                      } else {
+                        db.run('COMMIT');
+                        return res.json({
+                          id: parseInt(id),
+                          message: 'Sale updated successfully'
+                        });
                       }
-                      
-                      completedItems++;
-                      
-                      if (completedItems === items.length) {
-                        if (errors) {
-                          db.run('ROLLBACK');
-                          return res.status(500).json({ error: 'Failed to update sale' });
-                        } else {
-                          db.run('COMMIT');
-                          return res.json({
-                            id: parseInt(id),
-                            message: 'Sale updated successfully'
-                          });
-                        }
-                      }
-                    });
+                    }
                   });
                 });
               });
