@@ -8,8 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { getSalesApi, getSaleByIdApi, exportSalesApi, updateSaleApi, updateProductQuantityApi } from '@/lib/api';
-import { Search, Calendar, FileDown, X, Plus, Minus } from 'lucide-react';
+import { getSalesApi, getSaleByIdApi, exportSalesApi, updateSaleApi, updateProductQuantityApi, deleteSaleApi } from '@/lib/api';
+import { Search, Calendar, FileDown, X, Plus, Minus, Trash2 } from 'lucide-react';
 
 interface Sale {
   id: number;
@@ -132,6 +132,41 @@ const SalesReport = () => {
     }
   });
   
+  // Delete sale mutation
+  const deleteSaleMutation = useMutation({
+    mutationFn: async (id: number) => {
+      // First get the sale details to restore inventory
+      const saleDetail = await getSaleByIdApi(id);
+      
+      // Delete the sale
+      await deleteSaleApi(id);
+      
+      // Restore inventory quantities
+      if (saleDetail.items && saleDetail.items.length > 0) {
+        for (const item of saleDetail.items) {
+          try {
+            await updateQuantityMutation.mutateAsync({
+              id: item.product_id,
+              quantity: item.quantity
+            });
+          } catch (error) {
+            console.error(`Failed to restore inventory for product ${item.product_id}:`, error);
+          }
+        }
+      }
+      
+      return id;
+    },
+    onSuccess: () => {
+      toast.success('Sale deleted successfully');
+      queryClient.invalidateQueries({ queryKey: ['sales'] });
+    },
+    onError: (error) => {
+      console.error('Error deleting sale:', error);
+      toast.error('Failed to delete sale');
+    }
+  });
+  
   // Handle view sale details
   const handleViewDetails = (id: number) => {
     console.log('Viewing sale details for ID:', id);
@@ -161,6 +196,13 @@ const SalesReport = () => {
     
     exportSalesApi(params);
     toast.success('Exporting sales report');
+  };
+  
+  // Handle delete sale
+  const handleDeleteSale = (sale: Sale) => {
+    if (window.confirm(`Are you sure you want to delete ${sale.type} ${sale.number}? This action cannot be undone.`)) {
+      deleteSaleMutation.mutate(sale.id);
+    }
   };
   
   // Format date
@@ -362,16 +404,17 @@ const SalesReport = () => {
                     <th className="px-4 py-2 text-left">Customer</th>
                     <th className="px-4 py-2 text-right">Amount</th>
                     <th className="px-4 py-2 text-center">Payment</th>
+                    <th className="px-4 py-2 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-4 text-center">Loading...</td>
+                      <td colSpan={7} className="px-4 py-4 text-center">Loading...</td>
                     </tr>
                   ) : sales.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-4 text-center">No sales found</td>
+                      <td colSpan={7} className="px-4 py-4 text-center">No sales found</td>
                     </tr>
                   ) : (
                     sales.map((sale: Sale) => (
@@ -407,6 +450,25 @@ const SalesReport = () => {
                           ) : (
                             <span className="text-gray-400">-</span>
                           )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex items-center justify-center space-x-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleViewDetails(sale.id)}
+                            >
+                              View
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteSale(sale)}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <Trash2 size={16} />
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))
