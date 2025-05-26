@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -655,8 +654,8 @@ const NewSale = () => {
               </div>
               
               {/* Customer Details and Bill Info */}
-              <div className="grid grid-cols-2 border-b border-black">
-                <div className="border-r border-black">
+              <div className="grid grid-cols-4 border-b border-black">
+                <div className="border-r border-black col-span-3">
                   <div className="border-b border-black p-2 text-center font-bold">Customer Details</div>
                   <div className="grid grid-cols-2">
                     <div className="border-r border-black p-2 font-bold">Name</div>
@@ -681,12 +680,14 @@ const NewSale = () => {
                     </div>
                   )}
                 </div>
-                <div>
-                  <div className="grid grid-cols-2 h-full">
-                    <div className="border-r border-black p-2 font-bold">Bill No.</div>
-                    <div className="p-2">{receiptData.number}</div>
-                    <div className="border-r border-black border-t border-black p-2 font-bold">Date</div>
-                    <div className="border-t border-black p-2">{new Date(receiptData.date || Date.now()).toLocaleDateString()}, {new Date(receiptData.date || Date.now()).toLocaleTimeString()}</div>
+                <div className="col-span-1 flex flex-col h-full justify-between">
+                  <div className="border-b border-black p-2 flex flex-col justify-center h-1/2">
+                    <span className="font-bold">Bill No.: <span className="font-normal">{receiptData.number}</span></span>
+                  </div>
+                  <div className="p-2 flex flex-col justify-center h-1/2">
+                    <span className="font-bold">Date: <span className="font-normal">
+                      {new Date(receiptData.date || Date.now()).toLocaleDateString()}, {new Date(receiptData.date || Date.now()).toLocaleTimeString()}
+                    </span></span>
                   </div>
                 </div>
               </div>
@@ -720,7 +721,7 @@ const NewSale = () => {
                 <div className="flex flex-col">
                   {/* Empty space that will push SGST and CGST to bottom */}
                   <div className="flex-grow"></div>
-                  <div className="grid grid-cols-2 border-b border-black">
+                  <div className="grid grid-cols-2 border-t border-b border-black">
                     <div className="border-r border-black p-2 text-center font-bold">SGST @ 2.5%</div>
                     <div className="p-2 text-center">₹ {(receiptData.final_amount * 0.023881).toFixed(2)}</div>
                   </div>
