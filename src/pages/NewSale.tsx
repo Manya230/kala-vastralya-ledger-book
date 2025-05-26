@@ -607,21 +607,21 @@ const NewSale = () => {
       <Dialog open={showReceipt} onOpenChange={setShowReceipt}>
         <DialogContent className="max-w-3xl print:shadow-none print:border-none print:max-w-full">
           <DialogHeader className="relative print:mb-4">
-            <Button
+            {/* <Button
               variant="ghost"
               size="icon"
               className="absolute right-0 top-0 print:hidden"
               onClick={handleCloseReceipt}
             >
               <X size={16} />
-            </Button>
-            <DialogTitle className="text-center">
+            </Button> */}
+            {/* <DialogTitle className="text-center">
               {receiptType === 'bill' ? (
                 <div className="text-xl font-bold">KALAN VASTRALYA</div>
               ) : (
                 <div>Estimate/Challan</div>
               )}
-            </DialogTitle>
+            </DialogTitle> */}
           </DialogHeader>
           
           {!receiptData ? (

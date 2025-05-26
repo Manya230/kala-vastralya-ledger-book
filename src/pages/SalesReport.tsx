@@ -484,14 +484,14 @@ const SalesReport = () => {
       <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader className="relative">
-            <Button
+            {/* <Button
               variant="ghost"
               size="icon"
               className="absolute right-0 top-0"
               onClick={() => setIsDetailsOpen(false)}
             >
               <X size={16} />
-            </Button>
+            </Button> */}
             <DialogTitle>
               {saleDetail ? (
                 <>
