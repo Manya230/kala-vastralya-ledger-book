@@ -139,21 +139,7 @@ const SalesReport = () => {
   // Delete sale mutation
   const deleteSaleMutation = useMutation({
     mutationFn: async (saleId: number) => {
-      // First get the sale details to restore inventory
-      const saleDetail = await getSaleByIdApi(saleId);
-      
-      // Restore inventory quantities for each item
-      if (saleDetail.items && saleDetail.items.length > 0) {
-        for (const item of saleDetail.items) {
-          try {
-            await updateProductQuantityApi(item.product_id, item.quantity);
-          } catch (error) {
-            console.error(`Failed to restore inventory for product ${item.product_id}:`, error);
-          }
-        }
-      }
-      
-      // Delete the sale
+      // Server will handle inventory restoration automatically
       return deleteSaleApi(saleId);
     },
     onSuccess: () => {
@@ -267,30 +253,31 @@ const SalesReport = () => {
     
     const { total, discount, final } = calculateEditedTotals();
     
-    // Prepare updated item quantities for inventory
+    // Prepare inventory updates by comparing original vs edited items
     const originalItems = saleDetail.items;
-    const quantityUpdates: { productId: number, diff: number }[] = [];
+    const inventoryUpdates: { productId: number, quantityChange: number }[] = [];
     
-    // Find items with changed quantities
+    // Calculate quantity changes for existing items
     editedItems.forEach(editedItem => {
       const originalItem = originalItems.find(oi => oi.product_id === editedItem.product_id);
       if (originalItem) {
-        const diff = originalItem.quantity - editedItem.quantity;
-        if (diff !== 0) {
-          quantityUpdates.push({ productId: editedItem.product_id, diff });
+        // Positive change means we need to add back to inventory, negative means remove from inventory
+        const quantityChange = originalItem.quantity - editedItem.quantity;
+        if (quantityChange !== 0) {
+          inventoryUpdates.push({ productId: editedItem.product_id, quantityChange });
         }
       }
     });
     
-    // Find removed items that need to be returned to inventory
+    // Handle completely removed items - add their full quantity back to inventory
     originalItems.forEach(originalItem => {
       const stillExists = editedItems.some(ei => ei.product_id === originalItem.product_id);
       if (!stillExists) {
-        quantityUpdates.push({ productId: originalItem.product_id, diff: originalItem.quantity });
+        inventoryUpdates.push({ productId: originalItem.product_id, quantityChange: originalItem.quantity });
       }
     });
     
-    // Update the sale
+    // Update the sale first
     await updateSaleMutation.mutateAsync({
       id: selectedSaleId,
       updatedSale: {
@@ -302,12 +289,19 @@ const SalesReport = () => {
     });
     
     // Update inventory quantities
-    for (const update of quantityUpdates) {
+    for (const update of inventoryUpdates) {
       try {
-        await updateQuantityMutation.mutateAsync({
-          id: update.productId,
-          quantity: update.diff
-        });
+        // Get current quantity first
+        const currentProduct = await fetch(`http://localhost:3001/api/products/${update.productId}`);
+        if (currentProduct.ok) {
+          const productData = await currentProduct.json();
+          const newQuantity = productData.quantity + update.quantityChange;
+          
+          await updateQuantityMutation.mutateAsync({
+            id: update.productId,
+            quantity: newQuantity
+          });
+        }
       } catch (error) {
         console.error(`Failed to update inventory for product ${update.productId}:`, error);
         toast.error(`Failed to update inventory for one of the products`);

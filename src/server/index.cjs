@@ -366,6 +366,42 @@ app.get('/api/products/barcode/:barcode', (req, res) => {
   }
 });
 
+// Get product by ID
+app.get('/api/products/:id', (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    db.get(`
+      SELECT 
+        p.id,
+        p.barcode,
+        p.quantity,
+        p.cost_price,
+        p.sale_price,
+        c.name AS category,
+        m.name AS manufacturer
+      FROM products p
+      JOIN categories c ON p.category_id = c.id
+      JOIN manufacturers m ON p.manufacturer_id = m.id
+      WHERE p.id = ?
+    `, [id], (err, row) => {
+      if (err) {
+        console.error('Error fetching product:', err);
+        return res.status(500).json({ error: 'Failed to fetch product' });
+      }
+      
+      if (!row) {
+        return res.status(404).json({ error: 'Product not found' });
+      }
+      
+      res.json(row);
+    });
+  } catch (error) {
+    console.error('Error fetching product:', error);
+    res.status(500).json({ error: 'Failed to fetch product' });
+  }
+});
+
 // Add a new product
 app.post('/api/products', (req, res) => {
   const { barcode, category_id, manufacturer_id, quantity, cost_price, sale_price } = req.body;
