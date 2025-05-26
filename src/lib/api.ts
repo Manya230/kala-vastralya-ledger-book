@@ -1,3 +1,4 @@
+
 import axios from 'axios';
 
 // Change the base URL to point to the local development server
@@ -191,11 +192,6 @@ export const updateSaleApi = async (id: number, sale: {
   }>;
 }): Promise<Sale> => {
   const response = await api.put(`/sales/${id}`, sale);
-  return response.data;
-};
-
-export const deleteSaleApi = async (id: number): Promise<void> => {
-  const response = await api.delete(`/sales/${id}`);
   return response.data;
 };
 

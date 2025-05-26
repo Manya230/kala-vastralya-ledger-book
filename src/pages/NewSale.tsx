@@ -1,686 +1,831 @@
-import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { format } from 'date-fns';
+import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import Card from '@/components/Card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Search, X, Plus, Minus, CheckCircle } from 'lucide-react';
-import { getProductsApi, getProductByBarcodeApi, createSaleApi, updateProductQuantityApi } from '@/lib/api';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
+import { Barcode, Plus, Minus, X, Printer } from 'lucide-react';
+import { getProductByBarcodeApi, createSaleApi } from '@/lib/api';
+import { CartItem } from '@/contexts/AppContext';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
-interface Product {
-  id: number;
-  barcode: string;
-  category_name: string;
-  manufacturer_name: string;
-  quantity: number;
-  cost_price: number;
-  sale_price: number;
-}
-
-interface CartItem {
-  id: number;
-  barcode: string;
-  category_name: string;
-  sale_price: number;
-  quantity: number;
+interface CartItemWithDiscount extends CartItem {
+  discount_percent: number;
+  discount_amount: number;
 }
 
 const NewSale = () => {
-  const queryClient = useQueryClient();
-
-  // States
-  const [products, setProducts] = useState<Product[]>([]);
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [barcode, setBarcode] = useState('');
+  const navigate = useNavigate();
+  
+  // Form states
   const [customerName, setCustomerName] = useState('');
-  const [customerMobile, setCustomerMobile] = useState('');
+  const [mobileNumber, setMobileNumber] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
-  const [customerGstin, setCustomerGstin] = useState('');
-  const [saleType, setSaleType] = useState<'bill' | 'estimate'>('bill');
-  const [paymentMode, setPaymentMode] = useState('');
+  const [customerGstNumber, setCustomerGstNumber] = useState('');
+  const [barcode, setBarcode] = useState('');
+  const [quantity, setQuantity] = useState(1);
+  const [paymentMode, setPaymentMode] = useState<string | undefined>(undefined);
   const [remarks, setRemarks] = useState('');
-  const [totalDiscount, setTotalDiscount] = useState(0);
-  const [billNumber, setBillNumber] = useState('12345');
-  const [estimateNumber, setEstimateNumber] = useState('E-12345');
-
-  // Fetch products
-  const { refetch: fetchProducts } = useQuery({
-    queryKey: ['products'],
-    queryFn: getProductsApi,
-    onSuccess: (data) => {
-      setProducts(data);
-    },
-  });
-
+  
+  // Cart states
+  const [cartItems, setCartItems] = useState<CartItemWithDiscount[]>([]);
+  const [totalAmount, setTotalAmount] = useState(0);
+  const [discount, setDiscount] = useState(0);
+  const [finalAmount, setFinalAmount] = useState(0);
+  
+  // Receipt states
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [receiptData, setReceiptData] = useState<any>(null);
+  const [receiptType, setReceiptType] = useState<'bill' | 'estimate'>('bill');
+  
+  // Effect to recalculate totals when cart changes
   useEffect(() => {
-    fetchProducts();
-  }, [fetchProducts]);
-
-  // Fetch product by barcode
-  const { data: scannedProduct, refetch: fetchProductByBarcode } = useQuery({
-    queryKey: ['productByBarcode', barcode],
+    const total = cartItems.reduce((sum, item) => sum + (item.sale_price * item.quantity), 0);
+    const totalDiscountAmount = cartItems.reduce((sum, item) => sum + item.discount_amount, 0);
+    
+    setTotalAmount(total);
+    setDiscount(totalDiscountAmount);
+    setFinalAmount(total - totalDiscountAmount);
+  }, [cartItems]);
+  
+  // Effect to update discount when final amount changes
+  useEffect(() => {
+    // Only update the final amount if discount is manually changed (not from item discounts)
+    const calculatedDiscount = totalAmount - finalAmount;
+    if (calculatedDiscount !== discount) {
+      setDiscount(calculatedDiscount >= 0 ? calculatedDiscount : 0);
+    }
+  }, [finalAmount, totalAmount]);
+  
+  // Handle product data success
+  const handleProductSuccess = useCallback((data: any) => {
+    console.log("Product data received:", data);
+    
+    if (!data) {
+      toast.error('Product not found');
+      return;
+    }
+    
+    if (data.quantity < quantity) {
+      toast.error(`Only ${data.quantity} items available in stock`);
+      return;
+    }
+    
+    // Check if the product is already in the cart
+    const existingItem = cartItems.find(item => item.product_id === data.id);
+    
+    if (existingItem) {
+      // Update existing item
+      const newCart = cartItems.map(item => {
+        if (item.product_id === data.id) {
+          const newQuantity = item.quantity + quantity;
+          if (newQuantity > data.quantity) {
+            toast.error(`Only ${data.quantity} items available in stock`);
+            return item;
+          }
+          
+          const updatedPrice = data.sale_price * newQuantity;
+          const discount_amount = (item.discount_percent / 100) * updatedPrice;
+          
+          return {
+            ...item,
+            quantity: newQuantity,
+            item_final_price: updatedPrice,
+            discount_amount: discount_amount
+          };
+        }
+        return item;
+      });
+      
+      setCartItems(newCart);
+    } else {
+      // Add new item
+      setCartItems([...cartItems, {
+        product_id: data.id,
+        barcode: data.barcode,
+        category_name: data.category,
+        sale_price: data.sale_price,
+        quantity: quantity,
+        discount_percent: 0,
+        discount_amount: 0,
+        item_final_price: data.sale_price * quantity
+      }]);
+    }
+    
+    // Reset barcode and quantity
+    setBarcode('');
+    setQuantity(1);
+  }, [cartItems, quantity]);
+  
+  // Product search query
+  const { refetch: searchProduct } = useQuery({
+    queryKey: ['product', barcode],
     queryFn: () => getProductByBarcodeApi(barcode),
     enabled: false,
-    retry: false,
+    meta: {
+      onSuccess: handleProductSuccess,
+      onError: () => {
+        toast.error('Product not found');
+      }
+    }
   });
-
-  useEffect(() => {
-    if (barcode) {
-      fetchProductByBarcode();
+  
+  // Handle mobile number input
+  const handleMobileNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    // Only allow numbers and limit to 10 digits
+    if (/^\d*$/.test(value) && value.length <= 10) {
+      setMobileNumber(value);
     }
-  }, [barcode, fetchProductByBarcode]);
-
-  useEffect(() => {
-    if (scannedProduct) {
-      addProductToCart(scannedProduct);
-      setBarcode('');
+  };
+  
+  // Handle barcode input
+  const handleBarcodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    // Only allow numbers and limit to 8 digits
+    if (/^\d*$/.test(value) && value.length <= 8) {
+      setBarcode(value);
     }
-  }, [scannedProduct]);
-
+  };
+  
   // Create sale mutation
   const createSaleMutation = useMutation({
-    mutationFn: async () => {
-      if (cartItems.length === 0) {
-        throw new Error('Cart is empty');
-      }
-
-      const items = cartItems.map(item => ({
-        product_id: item.id,
-        category_name: item.category_name,
-        sale_price: item.sale_price,
-        quantity: item.quantity,
-        item_final_price: item.sale_price * item.quantity,
-      }));
-
-      const saleData = {
-        type: saleType,
+    mutationFn: createSaleApi,
+    onSuccess: (data) => {
+      toast.success(`${data.type === 'bill' ? 'Bill' : 'Estimate'} ${data.number} created successfully`);
+      
+      // Show receipt before navigating
+      setReceiptData({
+        ...data,
         customer_name: customerName,
-        mobile: customerMobile,
+        mobile: mobileNumber,
+        customer_address: customerAddress,
+        customer_gst_number: customerGstNumber,
         payment_mode: paymentMode,
-        remarks: remarks,
-        total_amount: cartTotal,
-        total_discount: totalDiscount,
-        final_amount: finalTotal,
-        items: items,
-      };
-
-      return createSaleApi(saleData);
+        items: cartItems.map(item => ({
+          ...item,
+          barcode: item.barcode
+        }))
+      });
+      setReceiptType(data.type);
+      setShowReceipt(true);
     },
-    onSuccess: () => {
-      toast.success('Sale created successfully');
-      queryClient.invalidateQueries({ queryKey: ['sales'] });
-      resetForm();
-    },
-    onError: (error: any) => {
+    onError: (error) => {
       console.error('Error creating sale:', error);
-      toast.error(error?.message || 'Failed to create sale');
-    },
-  });
-
-  // Update quantity mutation
-  const updateQuantityMutation = useMutation({
-    mutationFn: ({ id, quantity }: { id: number, quantity: number }) => {
-      return updateProductQuantityApi(id, quantity);
+      toast.error('Failed to create sale');
     }
   });
-
-  // Calculate totals
-  const cartTotal = cartItems.reduce((sum, item) => sum + item.sale_price * item.quantity, 0);
-  const finalTotal = cartTotal - totalDiscount;
-
-  // Add product to cart
-  const addProductToCart = (product: Product) => {
-    if (!product) {
-      toast.error('Product not found');
-      return;
-    }
-
-    if (product.quantity <= 0) {
-      toast.error(`Only ${product.quantity} items available in stock`);
-      return;
-    }
-
-    const existingItemIndex = cartItems.findIndex(item => item.id === product.id);
-
-    if (existingItemIndex !== -1) {
-      const existingItem = cartItems[existingItemIndex];
-      if (existingItem.quantity >= product.quantity) {
-        toast.error(`Only ${product.quantity} items available in stock`);
-        return;
-      }
-      const updatedItems = [...cartItems];
-      updatedItems[existingItemIndex] = {
-        ...existingItem,
-        quantity: existingItem.quantity + 1,
-      };
-      setCartItems(updatedItems);
-    } else {
-      const newItem: CartItem = {
-        id: product.id,
-        barcode: product.barcode,
-        category_name: product.category_name,
-        sale_price: product.sale_price,
-        quantity: 1,
-      };
-      setCartItems([...cartItems, newItem]);
-    }
-  };
-
-  // Remove from cart
-  const removeFromCart = (index: number) => {
-    const updatedItems = [...cartItems];
-    updatedItems.splice(index, 1);
-    setCartItems(updatedItems);
-  };
-
-  // Reset form
-  const resetForm = () => {
-    setCartItems([]);
-    setCustomerName('');
-    setCustomerMobile('');
-    setCustomerAddress('');
-    setCustomerGstin('');
-    setPaymentMode('');
-    setRemarks('');
-    setTotalDiscount(0);
-  };
-
-  // Calculate taxes
-  const calculateTaxes = (grandTotal: number) => {
-    const sgst = grandTotal * 0.023881;
-    const cgst = grandTotal * 0.023881;
-    return { sgst, cgst };
-  };
-
-  const generateReceipt = () => {
-    if (cartItems.length === 0) {
-      toast.error('Please add items to cart');
-      return;
-    }
-
-    const receiptWindow = window.open('', '_blank');
-    if (!receiptWindow) return;
-
-    const { sgst, cgst } = calculateTaxes(finalTotal);
-
-    let receiptHTML = '';
+  
+  // Handle add item
+  const handleAddItem = async (e: React.FormEvent) => {
+    e.preventDefault();
     
-    if (saleType === 'bill') {
-      receiptHTML = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Bill</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            .bill-container { max-width: 800px; margin: 0 auto; border: 2px solid black; }
-            .header { text-align: center; border-bottom: 2px solid black; padding: 10px; }
-            .company-name { font-size: 24px; font-weight: bold; margin-bottom: 5px; }
-            .contact-info { border-bottom: 1px solid black; padding: 5px 0; }
-            .bill-title { font-size: 20px; font-weight: bold; text-align: center; padding: 10px 0; border-bottom: 1px solid black; }
-            .customer-section { padding: 10px; border-bottom: 1px solid black; }
-            .customer-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
-            .items-table { width: 100%; border-collapse: collapse; }
-            .items-table th, .items-table td { border: 1px solid black; padding: 8px; text-align: left; }
-            .items-table th { background-color: #f0f0f0; text-align: center; }
-            .items-table .qty-col, .items-table .rate-col, .items-table .amount-col { text-align: center; }
-            .totals-section { padding: 10px; }
-            .total-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
-            .total-row.grand-total { font-weight: bold; border-top: 1px solid black; padding-top: 5px; }
-            .taxes-section { margin-top: 10px; display: flex; flex-direction: column; align-items: flex-end; }
-          </style>
-        </head>
-        <body>
-          <div class="bill-container">
-            <div class="header">
-              <div class="company-name">Kalan Vastralya</div>
-              <div class="contact-info">
-                <div>Mob. 9053555965, 9416930965</div>
-                <div>GSTIN: 06AABFK2971P1ZV</div>
-              </div>
-            </div>
-            
-            <div class="bill-title">BILL</div>
-            
-            <div class="customer-section">
-              <div class="customer-row">
-                <span><strong>Bill No:</strong> ${billNumber}</span>
-                <span><strong>Date:</strong> ${format(new Date(), 'dd/MM/yyyy')}</span>
-              </div>
-              <div class="customer-row">
-                <span><strong>Name:</strong> ${customerName || 'N/A'}</span>
-                ${customerMobile ? `<span><strong>Mobile:</strong> ${customerMobile}</span>` : '<span></span>'}
-              </div>
-              ${customerAddress ? `
-                <div class="customer-row">
-                  <span><strong>Address:</strong> ${customerAddress}</span>
-                  <span></span>
-                </div>
-              ` : ''}
-              ${customerGstin ? `
-                <div class="customer-row">
-                  <span><strong>GSTIN:</strong> ${customerGstin}</span>
-                  <span></span>
-                </div>
-              ` : ''}
-            </div>
-            
-            <table class="items-table">
-              <thead>
-                <tr>
-                  <th>S.No.</th>
-                  <th>Particulars</th>
-                  <th>Qty</th>
-                  <th>Rate</th>
-                  <th>Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${cartItems.map((item, index) => `
-                  <tr>
-                    <td style="text-align: center;">${index + 1}</td>
-                    <td>${item.category_name}</td>
-                    <td class="qty-col">${item.quantity}</td>
-                    <td class="rate-col">₹${item.sale_price.toFixed(2)}</td>
-                    <td class="amount-col">₹${(item.sale_price * item.quantity).toFixed(2)}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-            
-            <div class="totals-section">
-              <div class="total-row">
-                <span><strong>Total:</strong></span>
-                <span>₹${cartTotal.toFixed(2)}</span>
-              </div>
-              ${totalDiscount > 0 ? `
-                <div class="total-row">
-                  <span><strong>Total Discount:</strong></span>
-                  <span>₹${totalDiscount.toFixed(2)}</span>
-                </div>
-              ` : ''}
-              <div class="taxes-section">
-                <div class="total-row">
-                  <span><strong>SGST:</strong></span>
-                  <span>₹${sgst.toFixed(2)}</span>
-                </div>
-                <div class="total-row grand-total">
-                  <span><strong>CGST:</strong></span>
-                  <span>₹${cgst.toFixed(2)}</span>
-                </div>
-              </div>
-              <div class="total-row grand-total" style="margin-top: 10px;">
-                <span><strong>Grand Total (incl taxes):</strong></span>
-                <span>₹${finalTotal.toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
-        </body>
-        </html>
-      `;
-    } else {
-      receiptHTML = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Estimate/Challan</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            .receipt { max-width: 400px; margin: 0 auto; }
-            .header { text-align: center; margin-bottom: 20px; }
-            .divider { border-bottom: 1px dashed #000; margin: 10px 0; }
-            .row { display: flex; justify-content: space-between; margin: 5px 0; }
-            .items { margin: 10px 0; }
-            .item { margin: 5px 0; }
-            .totals { margin-top: 15px; }
-            .final-total { font-weight: bold; font-size: 1.1em; }
-          </style>
-        </head>
-        <body>
-          <div class="receipt">
-            <div class="header">
-              <h2>Kalan Vastralya</h2>
-              <h3>Estimate/Challan</h3>
-            </div>
-            
-            <div class="divider"></div>
-            
-            <div class="row">
-              <span>Estimate No:</span>
-              <span>${estimateNumber}</span>
-            </div>
-            <div class="row">
-              <span>Date:</span>
-              <span>${format(new Date(), 'dd/MM/yyyy hh:mm a')}</span>
-            </div>
-            ${customerName ? `
-              <div class="row">
-                <span>Customer:</span>
-                <span>${customerName}</span>
-              </div>
-            ` : ''}
-            ${customerMobile ? `
-              <div class="row">
-                <span>Mobile:</span>
-                <span>${customerMobile}</span>
-              </div>
-            ` : ''}
-            ${customerAddress ? `
-              <div class="row">
-                <span>Address:</span>
-                <span>${customerAddress}</span>
-              </div>
-            ` : ''}
-            ${customerGstin ? `
-              <div class="row">
-                <span>GSTIN:</span>
-                <span>${customerGstin}</span>
-              </div>
-            ` : ''}
-            
-            <div class="divider"></div>
-            
-            <div class="items">
-              <strong>Items:</strong>
-              ${cartItems.map(item => `
-                <div class="item">
-                  <div class="row">
-                    <span>${item.category_name}</span>
-                    <span>₹${item.sale_price}</span>
-                  </div>
-                  <div class="row">
-                    <span>Qty: ${item.quantity}</span>
-                    <span>₹${(item.sale_price * item.quantity).toFixed(2)}</span>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-            
-            <div class="divider"></div>
-            
-            <div class="totals">
-              <div class="row">
-                <span>Amount:</span>
-                <span>₹${cartTotal.toFixed(2)}</span>
-              </div>
-              ${totalDiscount > 0 ? `
-                <div class="row">
-                  <span>Total Discount:</span>
-                  <span>₹${totalDiscount.toFixed(2)}</span>
-                </div>
-              ` : ''}
-              <div class="row final-total">
-                <span>Grand Total (incl taxes):</span>
-                <span>₹${finalTotal.toFixed(2)}</span>
-              </div>
-            </div>
-            
-            ${remarks ? `
-              <div class="divider"></div>
-              <div>
-                <strong>Remarks:</strong>
-                <p>${remarks}</p>
-              </div>
-            ` : ''}
-          </div>
-        </body>
-        </html>
-      `;
-    }
-
-    receiptWindow.document.write(receiptHTML);
-    receiptWindow.document.close();
-    receiptWindow.print();
-  };
-
-  // Add validation function for cart quantity updates
-  const updateCartItemQuantity = (index: number, newQuantity: number) => {
-    if (newQuantity <= 0) {
-      removeFromCart(index);
+    if (!barcode) {
+      toast.error('Please enter a barcode');
       return;
     }
-
-    const item = cartItems[index];
-    const product = products.find(p => p.id === item.id);
     
-    if (!product) {
-      toast.error('Product not found');
+    if (quantity < 1) {
+      toast.error('Quantity must be at least 1');
       return;
     }
-
-    // Check if new quantity exceeds available stock
-    if (newQuantity > product.quantity) {
-      toast.error(`Only ${product.quantity} items available in stock`);
-      return;
-    }
-
-    const updatedItems = [...cartItems];
-    updatedItems[index] = {
-      ...item,
-      quantity: newQuantity
-    };
-    setCartItems(updatedItems);
-  };
-
-  const handleCreateSale = async () => {
+    
+    console.log("Searching for product with barcode:", barcode);
     try {
-      // Optimistically update the inventory
-      const optimisticCartItems = cartItems.map(item => ({
-        id: item.id,
-        quantity: item.quantity
-      }));
-
-      // Create the sale
-      await createSaleMutation.mutateAsync();
-
-      // Update inventory quantities
-      for (const item of optimisticCartItems) {
-        const product = products.find(p => p.id === item.id);
-        if (product) {
-          await updateQuantityMutation.mutateAsync({
-            id: item.id,
-            quantity: -item.quantity
-          });
-        }
+      const result = await searchProduct();
+      console.log("Search result:", result.data);
+      if (result.data) {
+        handleProductSuccess(result.data);
+      } else {
+        toast.error('Product not found');
       }
-    } catch (error: any) {
-      console.error('Error creating sale:', error);
-      toast.error(error?.message || 'Failed to create sale');
+    } catch (error) {
+      console.error("Error searching for product:", error);
+      toast.error('Product not found');
     }
   };
-
+  
+  // Handle update item quantity
+  const updateItemQuantity = (productId: number, newQuantity: number) => {
+    if (newQuantity < 1) {
+      return;
+    }
+    
+    const newCart = cartItems.map(item => {
+      if (item.product_id === productId) {
+        const updatedPrice = item.sale_price * newQuantity;
+        const discountAmount = (item.discount_percent / 100) * updatedPrice;
+        
+        return {
+          ...item,
+          quantity: newQuantity,
+          discount_amount: discountAmount,
+          item_final_price: updatedPrice
+        };
+      }
+      return item;
+    });
+    
+    setCartItems(newCart);
+  };
+  
+  // Handle update item discount
+  const updateItemDiscount = (productId: number, discountPercent: number) => {
+    // Limit discount between 0 and 100
+    const limitedDiscount = Math.max(0, Math.min(100, discountPercent));
+    
+    const newCart = cartItems.map(item => {
+      if (item.product_id === productId) {
+        const totalPrice = item.sale_price * item.quantity;
+        const discountAmount = (limitedDiscount / 100) * totalPrice;
+        
+        return {
+          ...item,
+          discount_percent: limitedDiscount,
+          discount_amount: discountAmount,
+          item_final_price: totalPrice // Keep the original amount, don't subtract discount
+        };
+      }
+      return item;
+    });
+    
+    setCartItems(newCart);
+  };
+  
+  // Handle remove item
+  const removeItem = (productId: number) => {
+    setCartItems(cartItems.filter(item => item.product_id !== productId));
+  };
+  
+  // Handle create bill or estimate
+  const handleCreateSale = (type: 'bill' | 'estimate') => {
+    if (cartItems.length === 0) {
+      toast.error('Please add at least one item to the cart');
+      return;
+    }
+    
+    createSaleMutation.mutate({
+      type,
+      customer_name: customerName,
+      mobile: mobileNumber,
+      payment_mode: paymentMode,
+      remarks,
+      total_amount: totalAmount,
+      total_discount: discount,
+      final_amount: finalAmount,
+      items: cartItems.map(({discount_percent, discount_amount, ...item}) => item)
+    });
+  };
+  
+  // Handle discount change
+  const handleDiscountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseFloat(e.target.value) || 0;
+    setDiscount(value);
+    setFinalAmount(totalAmount - value);
+  };
+  
+  // Handle final amount change
+  const handleFinalAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseFloat(e.target.value) || 0;
+    setFinalAmount(value);
+    const newDiscount = totalAmount - value;
+    setDiscount(newDiscount >= 0 ? newDiscount : 0);
+  };
+  
+  // Handle print receipt
+  const handlePrint = () => {
+    window.print();
+  };
+  
+  // Handle close receipt
+  const handleCloseReceipt = () => {
+    setShowReceipt(false);
+    navigate('/sales-report');
+  };
+  
   return (
     <Layout>
-      <div className="grid grid-cols-2 gap-4">
-        <Card title="New Sale">
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="barcode">Barcode</Label>
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
-                <Input
-                  type="text"
-                  id="barcode"
-                  placeholder="Scan or enter barcode"
-                  className="pl-8"
-                  value={barcode}
-                  onChange={(e) => setBarcode(e.target.value)}
-                />
-              </div>
-              {scannedProduct && (
-                <div className="flex items-center space-x-2 mt-2">
-                  <CheckCircle className="text-green-500 h-5 w-5" />
-                  <span>Product found: {scannedProduct.category_name}</span>
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
+      <Card title="New Sale">
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Customer Information */}
+          <div>
+            <h3 className="text-lg font-medium mb-4">Customer Details</h3>
+            <div className="grid gap-4">
               <div>
-                <Label htmlFor="customerName">Customer Name</Label>
+                <label htmlFor="customerName" className="block text-sm font-medium mb-1">
+                  Customer Name
+                </label>
                 <Input
-                  type="text"
                   id="customerName"
+                  placeholder="Enter customer name"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
                 />
               </div>
+              
               <div>
-                <Label htmlFor="customerMobile">Customer Mobile</Label>
+                <label htmlFor="mobileNumber" className="block text-sm font-medium mb-1">
+                  Mobile Number
+                </label>
                 <Input
-                  type="tel"
-                  id="customerMobile"
-                  value={customerMobile}
-                  onChange={(e) => setCustomerMobile(e.target.value)}
+                  id="mobileNumber"
+                  placeholder="Enter mobile number (10 digits max)"
+                  value={mobileNumber}
+                  onChange={handleMobileNumberChange}
+                  maxLength={10}
+                />
+              </div>
+              
+              <div>
+                <label htmlFor="customerAddress" className="block text-sm font-medium mb-1">
+                  Address
+                </label>
+                <Textarea
+                  id="customerAddress"
+                  placeholder="Enter customer address"
+                  value={customerAddress}
+                  onChange={(e) => setCustomerAddress(e.target.value)}
+                  rows={2}
+                />
+              </div>
+              
+              <div>
+                <label htmlFor="customerGstNumber" className="block text-sm font-medium mb-1">
+                  GSTIN Number
+                </label>
+                <Input
+                  id="customerGstNumber"
+                  placeholder="Enter GSTIN number"
+                  value={customerGstNumber}
+                  onChange={(e) => setCustomerGstNumber(e.target.value)}
                 />
               </div>
             </div>
-
-            <div>
-              <Label htmlFor="customerAddress">Customer Address</Label>
-              <Input
-                type="text"
-                id="customerAddress"
-                value={customerAddress}
-                onChange={(e) => setCustomerAddress(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="customerGstin">Customer GSTIN</Label>
-              <Input
-                type="text"
-                id="customerGstin"
-                value={customerGstin}
-                onChange={(e) => setCustomerGstin(e.target.value)}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="saleType">Sale Type</Label>
-                <Select value={saleType} onValueChange={(value) => setSaleType(value as 'bill' | 'estimate')}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select sale type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="bill">Bill</SelectItem>
-                    <SelectItem value="estimate">Estimate</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="paymentMode">Payment Mode</Label>
-                <Select value={paymentMode} onValueChange={setPaymentMode}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select payment mode" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="card">Card</SelectItem>
-                    <SelectItem value="upi">UPI</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="remarks">Remarks</Label>
-              <Textarea
-                id="remarks"
-                placeholder="Enter remarks"
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-              />
-            </div>
-          </div>
-        </Card>
-
-        <Card title="Cart">
-          {cartItems.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No items in cart</p>
-          ) : (
-            <div className="space-y-2">
-              {cartItems.map((item, index) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded">
-                  <div className="flex-1">
-                    <div className="font-medium">{item.category_name}</div>
-                    <div className="text-sm text-gray-500">₹{item.sale_price} each</div>
-                  </div>
-                  
-                  <div className="flex items-center space-x-3">
-                    <div className="flex items-center space-x-2">
-                      <button
-                        type="button"
-                        className="w-8 h-8 flex items-center justify-center rounded bg-gray-200"
-                        onClick={() => updateCartItemQuantity(index, item.quantity - 1)}
-                      >
-                        <Minus size={16} />
-                      </button>
-                      <span className="text-center w-8">{item.quantity}</span>
-                      <button
-                        type="button"
-                        className="w-8 h-8 flex items-center justify-center rounded bg-gray-200"
-                        onClick={() => updateCartItemQuantity(index, item.quantity + 1)}
-                      >
-                        <Plus size={16} />
-                      </button>
-                    </div>
-                    
-                    <div className="text-right min-w-[80px]">
-                      <div className="font-medium">
-                        ₹{(item.sale_price * item.quantity).toFixed(2)}
-                      </div>
-                    </div>
-                    
-                    <button
-                      type="button"
-                      className="p-1 text-gray-500 hover:text-red-500"
-                      onClick={() => removeFromCart(index)}
-                    >
-                      <X size={16} />
-                    </button>
+            
+            <h3 className="text-lg font-medium mt-6 mb-4">Scan or Enter Barcode</h3>
+            <form onSubmit={handleAddItem} className="grid gap-4">
+              <div className="flex items-end gap-2">
+                <div className="flex-grow">
+                  <label htmlFor="barcode" className="block text-sm font-medium mb-1">
+                    Barcode
+                  </label>
+                  <div className="relative">
+                    <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
+                    <Input
+                      id="barcode"
+                      placeholder="Scan or type barcode (8 digits max)"
+                      className="pl-8"
+                      value={barcode}
+                      onChange={handleBarcodeChange}
+                      maxLength={8}
+                    />
                   </div>
                 </div>
-              ))}
+                
+                <div className="w-20">
+                  <label htmlFor="quantity" className="block text-sm font-medium mb-1">
+                    Qty
+                  </label>
+                  <Input
+                    id="quantity"
+                    type="number"
+                    min="1"
+                    value={quantity}
+                    onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                  />
+                </div>
+                
+                <Button type="submit" className="flex-shrink-0">
+                  <Plus size={16} />
+                  Add
+                </Button>
+              </div>
+            </form>
+            
+            <h3 className="text-lg font-medium mt-6 mb-4">Payment Details</h3>
+            <div className="grid gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Payment Mode
+                </label>
+                <RadioGroup value={paymentMode} onValueChange={setPaymentMode}>
+                  <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="cash" id="cash" />
+                      <Label htmlFor="cash">Cash</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="upi" id="upi" />
+                      <Label htmlFor="upi">UPI</Label>
+                    </div>
+                  </div>
+                </RadioGroup>
+              </div>
               
-              <div className="flex items-center justify-between">
-                <Label htmlFor="discount">Total Discount</Label>
-                <Input
-                  type="number"
-                  id="discount"
-                  className="w-24 text-right"
-                  value={totalDiscount}
-                  onChange={(e) => setTotalDiscount(parseFloat(e.target.value))}
+              <div>
+                <label htmlFor="remarks" className="block text-sm font-medium mb-1">
+                  Remarks
+                </label>
+                <Textarea
+                  id="remarks"
+                  placeholder="Add any remarks or notes here..."
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                  rows={3}
                 />
               </div>
-
-              <div className="py-2 font-medium text-right text-sm">
-                <div>Total: ₹{cartTotal.toFixed(2)}</div>
-                <div>Discount: ₹{totalDiscount.toFixed(2)}</div>
-                <div className="text-base">Final Total: ₹{finalTotal.toFixed(2)}</div>
+            </div>
+          </div>
+          
+          {/* Cart */}
+          <div>
+            <h3 className="text-lg font-medium mb-4">Items</h3>
+            
+            {cartItems.length === 0 ? (
+              <div className="bg-gray-50 p-4 text-center border rounded">
+                <p className="text-gray-500">No items in cart</p>
+              </div>
+            ) : (
+              <div className="border rounded overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left">Item</th>
+                      <th className="px-4 py-2 text-center">Qty</th>
+                      <th className="px-4 py-2 text-right">Rate</th>
+                      <th className="px-4 py-2 text-right">Discount</th>
+                      <th className="px-4 py-2 text-right">Amount</th>
+                      <th className="px-2 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cartItems.map((item, index) => (
+                      <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                        <td className="px-4 py-2">
+                          <div className="font-medium">{item.category_name}</div>
+                          <div className="text-xs text-gray-500">{item.barcode}</div>
+                        </td>
+                        <td className="px-4 py-2">
+                          <div className="flex items-center justify-center space-x-1">
+                            <button
+                              type="button"
+                              className="w-6 h-6 flex items-center justify-center rounded bg-gray-200"
+                              onClick={() => updateItemQuantity(item.product_id, item.quantity - 1)}
+                            >
+                              <Minus size={12} />
+                            </button>
+                            <span className="text-center w-6">{item.quantity}</span>
+                            <button
+                              type="button"
+                              className="w-6 h-6 flex items-center justify-center rounded bg-gray-200"
+                              onClick={() => updateItemQuantity(item.product_id, item.quantity + 1)}
+                            >
+                              <Plus size={12} />
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2 text-right">₹{(item.sale_price ?? 0).toFixed(2)}</td>
+                        <td className="px-4 py-2 text-right">
+                          <Input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={item.discount_percent}
+                            onChange={(e) => updateItemDiscount(item.product_id, parseFloat(e.target.value) || 0)}
+                            className="h-7 w-14 text-right"
+                          />%
+                        </td>
+                        <td className="px-4 py-2 text-right">₹{(item.item_final_price ?? 0).toFixed(2)}</td>
+                        <td className="px-2 py-2">
+                          <button
+                            type="button"
+                            className="p-1 text-gray-500 hover:text-red-500"
+                            onClick={() => removeItem(item.product_id)}
+                          >
+                            <X size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                
+                <div className="bg-gray-50 p-4 border-t">
+                  <div className="flex justify-between mb-2">
+                    <span>Total:</span>
+                    <span>₹{totalAmount.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between mb-2">
+                    <span>Total Discount:</span>
+                    <div className="w-24">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={discount}
+                        onChange={handleDiscountChange}
+                        className="h-7 text-right"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium">Grand Total (incl taxes):</span>
+                    <div className="w-24">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={finalAmount}
+                        onChange={handleFinalAmountChange}
+                        className="h-7 text-right"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            <div className="mt-6 flex justify-between">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleCreateSale('estimate')}
+                disabled={createSaleMutation.isPending || cartItems.length === 0}
+              >
+                Create Estimate
+              </Button>
+              
+              <Button
+                type="button"
+                onClick={() => handleCreateSale('bill')}
+                disabled={createSaleMutation.isPending || cartItems.length === 0}
+              >
+                Create Bill
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Card>
+      
+      {/* Receipt Dialog */}
+      <Dialog open={showReceipt} onOpenChange={setShowReceipt}>
+        <DialogContent className="max-w-3xl print:shadow-none print:border-none print:max-w-full">
+          <DialogHeader className="relative print:mb-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute right-0 top-0 print:hidden"
+              onClick={handleCloseReceipt}
+            >
+              <X size={16} />
+            </Button>
+            <DialogTitle className="text-center">
+              {receiptType === 'bill' ? (
+                <div className="text-xl font-bold">KALAN VASTRALYA</div>
+              ) : (
+                <div>Estimate/Challan</div>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          
+          {!receiptData ? (
+            <div className="py-8 text-center">Loading...</div>
+          ) : receiptType === 'bill' ? (
+            // Custom Bill Format
+            <div className="border border-black">
+              {/* Header */}
+              <div className="grid grid-cols-3 border-b border-black">
+                <div className="border-r border-black p-2">
+                  <div className="text-sm">Mob 9053555965, 0416930965</div>
+                </div>
+                <div className="border-r border-black p-2 text-center">
+                  <div className="font-bold text-lg">BILL</div>
+                </div>
+                <div className="p-2 text-right">
+                  <div className="text-sm">GSTIN: 06AEBPY4971P1ZN</div>
+                </div>
+              </div>
+              
+              {/* Company Name */}
+              <div className="text-center border-b border-black p-2">
+                <div className="font-bold text-xl">KALAN VASTRALYA</div>
+              </div>
+              
+              {/* Address */}
+              <div className="text-center border-b border-black p-2">
+                <div className="text-sm">254B, Opp RJS Plaza, Pataudi Road, Haily Mandi</div>
+              </div>
+              
+              {/* Customer Details and Bill Info */}
+              <div className="grid grid-cols-2 border-b border-black">
+                <div className="border-r border-black">
+                  <div className="border-b border-black p-2 text-center font-bold">Customer Details</div>
+                  <div className="grid grid-cols-2">
+                    <div className="border-r border-black p-2 font-bold">Name</div>
+                    <div className="p-2">{receiptData.customer_name}</div>
+                  </div>
+                  {receiptData.mobile && (
+                    <div className="grid grid-cols-2 border-t border-black">
+                      <div className="border-r border-black p-2 font-bold">Mobile No.</div>
+                      <div className="p-2">{receiptData.mobile}</div>
+                    </div>
+                  )}
+                  {receiptData.customer_address && (
+                    <div className="grid grid-cols-2 border-t border-black">
+                      <div className="border-r border-black p-2 font-bold">Address</div>
+                      <div className="p-2">{receiptData.customer_address}</div>
+                    </div>
+                  )}
+                  {receiptData.customer_gst_number && (
+                    <div className="grid grid-cols-2 border-t border-black">
+                      <div className="border-r border-black p-2 font-bold">GSTIN Number</div>
+                      <div className="p-2">{receiptData.customer_gst_number}</div>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div className="grid grid-cols-2 h-full">
+                    <div className="border-r border-black p-2 font-bold">Bill No.</div>
+                    <div className="p-2">{receiptData.number}</div>
+                    <div className="border-r border-black border-t border-black p-2 font-bold">Date</div>
+                    <div className="border-t border-black p-2">{new Date(receiptData.date || Date.now()).toLocaleDateString()}, {new Date(receiptData.date || Date.now()).toLocaleTimeString()}</div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Items Table */}
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b border-black">
+                    <th className="border-r border-black p-2 text-left">Sr. No.</th>
+                    <th className="border-r border-black p-2 text-left">Item</th>
+                    <th className="border-r border-black p-2 text-center">Qty</th>
+                    <th className="border-r border-black p-2 text-right">Rate</th>
+                    <th className="p-2 text-right">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {receiptData.items.map((item: any, index: number) => (
+                    <tr key={index} className="border-b border-black">
+                      <td className="border-r border-black p-2">{index + 1}</td>
+                      <td className="border-r border-black p-2">{item.category_name}</td>
+                      <td className="border-r border-black p-2 text-center">{item.quantity}</td>
+                      <td className="border-r border-black p-2 text-right">₹ {(item.sale_price ?? 0).toFixed(0)}</td>
+                      <td className="p-2 text-right">₹ {(item.item_final_price ?? 0).toFixed(0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              
+              {/* Totals Section */}
+              <div className="grid grid-cols-2">
+                <div>
+                  <div className="grid grid-cols-2 border-b border-black">
+                    <div className="border-r border-black p-2 text-center font-bold">SGST @ 2.5%</div>
+                    <div className="p-2 text-center">₹ {(receiptData.final_amount * 0.023881).toFixed(2)}</div>
+                  </div>
+                  <div className="grid grid-cols-2">
+                    <div className="border-r border-black p-2 text-center font-bold">CGST @ 2.5%</div>
+                    <div className="p-2 text-center">₹ {(receiptData.final_amount * 0.023881).toFixed(2)}</div>
+                  </div>
+                </div>
+                <div className="border-l border-black">
+                  <div className="grid grid-cols-2 border-b border-black">
+                    <div className="border-r border-black p-2 text-right font-bold">Total</div>
+                    <div className="p-2 text-right">₹ {receiptData.total_amount.toFixed(0)}</div>
+                  </div>
+                  {receiptData.total_discount > 0 && (
+                    <div className="grid grid-cols-2 border-b border-black">
+                      <div className="border-r border-black p-2 text-right font-bold">Total Discount</div>
+                      <div className="p-2 text-right">₹ {receiptData.total_discount.toFixed(0)}</div>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2">
+                    <div className="border-r border-black p-2 text-right font-bold">Grand Total (incl taxes)</div>
+                    <div className="p-2 text-right">₹ {receiptData.final_amount.toFixed(0)}</div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Footer */}
+              <div className="grid grid-cols-2 border-t border-black">
+                <div className="border-r border-black p-2">
+                  <div className="text-center">Thank you for shopping.</div>
+                  <div className="text-center text-sm">(Goods once sold will not be taken back.)</div>
+                </div>
+                <div className="p-2 text-center">
+                  <div>Auth. Signatory</div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            // Existing Estimate Format
+            <div>
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <p className="text-sm text-gray-500">
+                    Estimate Number
+                  </p>
+                  <p className="font-medium">{receiptData.number}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Date</p>
+                  <p className="font-medium">{new Date(receiptData.date || Date.now()).toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Customer</p>
+                  <p className="font-medium">{receiptData.customer_name}</p>
+                </div>
+                {receiptData.mobile && (
+                  <div>
+                    <p className="text-sm text-gray-500">Mobile</p>
+                    <p className="font-medium">{receiptData.mobile}</p>
+                  </div>
+                )}
+                {receiptData.customer_address && (
+                  <div>
+                    <p className="text-sm text-gray-500">Address</p>
+                    <p className="font-medium">{receiptData.customer_address}</p>
+                  </div>
+                )}
+                {receiptData.customer_gst_number && (
+                  <div>
+                    <p className="text-sm text-gray-500">GSTIN Number</p>
+                    <p className="font-medium">{receiptData.customer_gst_number}</p>
+                  </div>
+                )}
+                {receiptData.payment_mode && (
+                  <div>
+                    <p className="text-sm text-gray-500">Payment Mode</p>
+                    <p className="font-medium capitalize">{receiptData.payment_mode}</p>
+                  </div>
+                )}
+              </div>
+              
+              <p className="font-medium mb-2">Items:</p>
+              <div className="border rounded overflow-hidden mb-4">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left">Item</th>
+                      <th className="px-4 py-2 text-center">Qty</th>
+                      <th className="px-4 py-2 text-right">Rate</th>
+                      <th className="px-4 py-2 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {receiptData.items.map((item: any, index: number) => (
+                      <tr key={index} className="border-t">
+                        <td className="px-4 py-2">
+                          <div className="font-medium">{item.category_name}</div>
+                          <div className="text-xs text-gray-500">{item.barcode}</div>
+                        </td>
+                        <td className="px-4 py-2 text-center">{item.quantity}</td>
+                        <td className="px-4 py-2 text-right">₹{(item.sale_price ?? 0).toFixed(2)}</td>
+                        <td className="px-4 py-2 text-right">₹{(item.item_final_price ?? 0).toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              <div className="bg-gray-50 p-4 rounded">
+                <div className="flex justify-between mb-1">
+                  <span>Total:</span>
+                  <span>₹{receiptData.total_amount.toFixed(2)}</span>
+                </div>
+                
+                {receiptData.total_discount > 0 && (
+                  <div className="flex justify-between mb-1">
+                    <span>Total Discount:</span>
+                    <span>₹{receiptData.total_discount.toFixed(2)}</span>
+                  </div>
+                )}
+                
+                <div className="flex justify-between font-medium">
+                  <span>Final Amount:</span>
+                  <span>₹{receiptData.final_amount.toFixed(2)}</span>
+                </div>
               </div>
             </div>
           )}
-        </Card>
-      </div>
-
-      <div className="mt-4 flex justify-end space-x-2">
-        <Button variant="secondary" onClick={resetForm}>
-          Reset
-        </Button>
-        <Button onClick={generateReceipt}>
-          Generate Receipt
-        </Button>
-        <Button onClick={handleCreateSale} disabled={createSaleMutation.isPending}>
-          {createSaleMutation.isPending ? 'Creating...' : 'Create Sale'}
-        </Button>
-      </div>
+          
+          <div className="mt-6 flex justify-end gap-2 print:hidden">
+            <Button onClick={handleCloseReceipt} variant="outline">
+              Close
+            </Button>
+            <Button onClick={handlePrint} className="flex items-center gap-1">
+              <Printer size={16} />
+              Print
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 };
