@@ -136,6 +136,8 @@ export const createSaleApi = async (sale: {
   total_amount: number;
   total_discount?: number;
   final_amount: number;
+  customer_address?: string; // <-- add this
+  customer_gstin?: string;   // <-- and this
   items: Array<{
     product_id: number;
     category_name: string;

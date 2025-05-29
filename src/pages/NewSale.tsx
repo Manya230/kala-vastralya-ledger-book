@@ -308,6 +308,8 @@ const NewSale = () => {
       total_amount: totalAmount,
       total_discount: discount,
       final_amount: finalAmount,
+      customer_address: customerAddress,      // <-- add this
+      customer_gstin: customerGstNumber,      // <-- and this
       items: cartItems.map(({discount_percent, discount_amount, ...item}) => item)
     });
   };

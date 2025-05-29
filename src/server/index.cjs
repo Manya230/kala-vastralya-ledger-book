@@ -510,7 +510,9 @@ app.post('/api/sales', (req, res) => {
     total_amount, 
     total_discount,
     final_amount,
-    items 
+    items,
+    customer_address,
+    customer_gstin
   } = req.body;
   
   if (!type || !items || !Array.isArray(items) || items.length === 0) {
@@ -549,8 +551,9 @@ app.post('/api/sales', (req, res) => {
         db.run(`
           INSERT INTO sales (
             type, number, customer_name, mobile, payment_mode, remarks, 
-            date, total_amount, total_discount, final_amount
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            date, total_amount, total_discount, final_amount,
+            customer_address, customer_gstin
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
           type, 
           formattedNumber, 
@@ -561,7 +564,9 @@ app.post('/api/sales', (req, res) => {
           date,
           total_amount,
           total_discount || 0,
-          final_amount
+          final_amount,
+          customer_address || null,
+          customer_gstin || null
         ], function(err) {
           if (err) {
             console.error('Error creating sale:', err);
@@ -729,7 +734,8 @@ app.get('/api/sales/:id', (req, res) => {
     db.get(`
       SELECT 
         s.id, s.type, s.number, s.customer_name, s.mobile, 
-        s.payment_mode, s.remarks, s.date, s.total_amount, s.total_discount, s.final_amount
+        s.payment_mode, s.remarks, s.date, s.total_amount, s.total_discount, s.final_amount,
+        s.customer_address, s.customer_gstin
       FROM sales s
       WHERE s.id = ?
     `, [id], (err, sale) => {

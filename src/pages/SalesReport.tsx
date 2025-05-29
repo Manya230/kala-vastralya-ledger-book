@@ -539,7 +539,7 @@ const SalesReport = () => {
                 )}
                 {saleDetail.customer_gstin && (
                   <div>
-                    <p className="text-sm text-gray-500">GSTIN</p>
+                    <p className="text-sm text-gray-500">GSTIN Number</p>
                     <p className="font-medium">{saleDetail.customer_gstin}</p>
                   </div>
                 )}
