@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -44,6 +43,15 @@ const NewSale = () => {
     queryKey: ['products'],
     queryFn: async () => {
       const response = await api.get('/products');
+      return response.data;
+    }
+  });
+  
+  // Fetch all sales to generate proper bill/estimate numbers
+  const { data: allSales = [] } = useQuery({
+    queryKey: ['sales'],
+    queryFn: async () => {
+      const response = await api.get('/sales');
       return response.data;
     }
   });
@@ -274,13 +282,23 @@ const NewSale = () => {
   
   // Generate receipt data
   const generateReceiptData = (type: 'bill' | 'estimate') => {
-    // Generate a temporary number for preview
-    const tempNumber = type === 'bill' ? `BILL-PREVIEW-${Date.now()}` : `EST-PREVIEW-${Date.now()}`;
+    // Generate proper bill/estimate numbers
+    const salesOfType = allSales.filter(sale => sale.type === type);
+    const lastNumber = salesOfType.length > 0 
+      ? Math.max(...salesOfType.map(sale => {
+          const match = sale.number.match(/\d+$/);
+          return match ? parseInt(match[0]) : 0;
+        }))
+      : 0;
+    const nextNumber = lastNumber + 1;
+    const properNumber = type === 'bill' 
+      ? `BILL-${String(nextNumber).padStart(4, '0')}`
+      : `EST-${String(nextNumber).padStart(4, '0')}`;
     
     return {
       id: 0, // temporary id
       type,
-      number: tempNumber,
+      number: properNumber,
       customer_name: customerName,
       mobile: mobileNumber,
       customer_address: customerAddress,
@@ -321,8 +339,8 @@ const NewSale = () => {
             .header { 
               border-bottom: 2px solid black; 
               padding: 10px; 
-              text-center; 
-              font-weight: bold; 
+              text-align: center; 
+              font-weight: normal; 
               font-size: 18px; 
             }
             .contact-row { 
@@ -364,7 +382,7 @@ const NewSale = () => {
             .customer-header { 
               border-bottom: 2px solid black; 
               padding: 10px; 
-              text-center; 
+              text-align: center; 
               font-weight: bold; 
             }
             .customer-row { 
@@ -467,7 +485,10 @@ const NewSale = () => {
             }
             .footer-right { 
               padding: 10px; 
-              text-align: center; 
+              text-align: center;
+              display: flex;
+              align-items: flex-end;
+              justify-content: center; 
             }
             @media print { 
               body { margin: 0; } 
