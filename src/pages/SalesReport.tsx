@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { getSalesApi, getSaleByIdApi, exportSalesApi, updateSaleApi, updateProductQuantityApi, deleteSaleApi } from '@/lib/api';
-import { Search, Calendar, FileDown, X, Plus, Minus, Trash2 } from 'lucide-react';
+import { Search, Calendar, FileDown, X, Plus, Minus, Trash2, Printer } from 'lucide-react';
 
 interface Sale {
   id: number;
@@ -160,6 +160,298 @@ const SalesReport = () => {
     setSelectedSaleId(id);
     setIsDetailsOpen(true);
     setIsEditing(false);
+  };
+  
+  // Handle print sale
+  const handlePrintSale = async (sale: Sale) => {
+    try {
+      // Fetch full sale details including items
+      const saleDetail = await getSaleByIdApi(sale.id);
+      
+      // Generate print content
+      const printContent = generatePrintContent(saleDetail);
+      
+      // Open in new tab
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(printContent);
+        printWindow.document.close();
+      }
+    } catch (error) {
+      console.error('Error printing sale:', error);
+      toast.error('Failed to print sale');
+    }
+  };
+  
+  // Generate print content with same format as NewSale
+  const generatePrintContent = (saleDetail: SaleDetail) => {
+    const calculateTaxes = (grandTotal: number) => {
+      const sgst = grandTotal * 0.023881;
+      const cgst = grandTotal * 0.023881;
+      return { sgst, cgst };
+    };
+
+    const taxes = saleDetail.type === 'bill' ? calculateTaxes(saleDetail.final_amount) : { sgst: 0, cgst: 0 };
+
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${saleDetail.type === 'bill' ? 'Bill' : 'Estimate'} - ${saleDetail.number}</title>
+          <style>
+            body { 
+              font-family: Arial, sans-serif; 
+              margin: 0; 
+              padding: 20px; 
+              font-size: 12px; 
+            }
+            .receipt { 
+              max-width: 800px; 
+              margin: 0 auto; 
+              border: 1px solid black; 
+            }
+            .header { 
+              border-bottom: 2px solid black; 
+              padding: 10px; 
+              text-align: center; 
+              font-weight: normal; 
+              font-size: 18px; 
+            }
+            .contact-row { 
+              display: flex; 
+              border-bottom: 1px solid black; 
+            }
+            .contact-left { 
+              flex: 1; 
+              padding: 10px; 
+              border-right: 1px solid black; 
+            }
+            .contact-right { 
+              flex: 1; 
+              padding: 10px; 
+            }
+            .info-row { 
+              display: flex; 
+              border-bottom: 1px solid black; 
+            }
+            .info-left { 
+              flex: 1; 
+              padding: 10px; 
+              border-right: 1px solid black; 
+            }
+            .info-right { 
+              flex: 1; 
+              padding: 10px; 
+            }
+            .customer-section { 
+              border-bottom: 1px solid black; 
+            }
+            .customer-header { 
+              border-bottom: 2px solid black; 
+              padding: 10px; 
+              text-align: center; 
+              font-weight: bold; 
+            }
+            .customer-row { 
+              display: flex; 
+            }
+            .customer-left { 
+              flex: 1; 
+              padding: 10px; 
+              border-right: 1px solid black; 
+            }
+            .customer-right { 
+              flex: 1; 
+              padding: 10px; 
+            }
+            .items-table { 
+              width: 100%; 
+              border-collapse: collapse; 
+            }
+            .items-table th, .items-table td { 
+              border: 1px solid black; 
+              padding: 8px; 
+              text-align: left; 
+            }
+            .items-table th { 
+              background-color: #f0f0f0; 
+              font-weight: bold; 
+            }
+            .items-table .text-right { 
+              text-align: right; 
+            }
+            .items-table .text-center { 
+              text-align: center; 
+            }
+            .totals-section { 
+              border-top: 2px solid black; 
+            }
+            .totals-row { 
+              display: flex; 
+            }
+            .totals-left { 
+              flex: 1; 
+              padding: 10px; 
+              border-right: 1px solid black; 
+            }
+            .totals-right { 
+              flex: 1; 
+              padding: 10px; 
+            }
+            .total-line { 
+              display: flex; 
+              justify-content: space-between; 
+              margin-bottom: 5px; 
+            }
+            .total-line.final { 
+              font-weight: bold; 
+              border-top: 1px solid black; 
+              padding-top: 5px; 
+            }
+            .footer-section { 
+              border-top: 1px solid black; 
+            }
+            .footer-row { 
+              display: flex; 
+            }
+            .footer-left { 
+              flex: 1; 
+              padding: 10px; 
+              border-right: 1px solid black; 
+            }
+            .footer-right { 
+              padding: 10px; 
+              text-align: center;
+              display: flex;
+              align-items: flex-end;
+              justify-content: center; 
+            }
+            @media print { 
+              body { margin: 0; } 
+              .receipt { border: none; } 
+            }
+          </style>
+        </head>
+        <body>
+          <div class="receipt">
+            <!-- Header -->
+            <div class="header">
+              ${saleDetail.type === 'bill' ? 'BILL' : 'ESTIMATE'}
+            </div>
+            
+            <!-- Contact Information -->
+            <div class="contact-row">
+              <div class="contact-left">
+                <strong>KALA VASTRALYA</strong><br>
+                Shop No. 12, Trimurti Apartment,<br>
+                Near Axis Bank, Karve Road,<br>
+                Kothrud, Pune - 411029<br>
+                Mobile: 8007792000<br>
+                Email: kalavastralya@gmail.com
+              </div>
+              <div class="contact-right">
+                <div><strong>${saleDetail.type === 'bill' ? 'Bill' : 'Estimate'} No:</strong> ${saleDetail.number}</div>
+                <div><strong>Date:</strong> ${format(new Date(saleDetail.date), 'dd/MM/yyyy')}</div>
+                ${saleDetail.type === 'bill' ? '<div><strong>GSTIN:</strong> 27ABCDE1234F1Z5</div>' : ''}
+              </div>
+            </div>
+            
+            <!-- Customer Details -->
+            <div class="customer-section">
+              <div class="customer-header">Customer Details</div>
+              <div class="customer-row">
+                <div class="customer-left">
+                  <div><strong>Name:</strong> ${saleDetail.customer_name}</div>
+                  ${saleDetail.mobile ? `<div><strong>Mobile:</strong> ${saleDetail.mobile}</div>` : ''}
+                  ${saleDetail.customer_address ? `<div><strong>Address:</strong> ${saleDetail.customer_address}</div>` : ''}
+                </div>
+                <div class="customer-right">
+                  ${saleDetail.customer_gstin ? `<div><strong>GSTIN:</strong> ${saleDetail.customer_gstin}</div>` : ''}
+                  ${saleDetail.payment_mode ? `<div><strong>Payment Mode:</strong> ${saleDetail.payment_mode}</div>` : ''}
+                </div>
+              </div>
+            </div>
+            
+            <!-- Items Table -->
+            <table class="items-table">
+              <thead>
+                <tr>
+                  <th>Sr.No.</th>
+                  <th>Particulars</th>
+                  <th class="text-center">Qty</th>
+                  <th class="text-right">Rate</th>
+                  <th class="text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${saleDetail.items.map((item, index) => `
+                  <tr>
+                    <td class="text-center">${index + 1}</td>
+                    <td>${item.category_name}</td>
+                    <td class="text-center">${item.quantity}</td>
+                    <td class="text-right">₹${item.sale_price.toFixed(2)}</td>
+                    <td class="text-right">₹${item.item_final_price.toFixed(2)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+            
+            <!-- Totals -->
+            <div class="totals-section">
+              <div class="totals-row">
+                <div class="totals-left">
+                  ${saleDetail.remarks ? `<div><strong>Remarks:</strong> ${saleDetail.remarks}</div>` : ''}
+                </div>
+                <div class="totals-right">
+                  <div class="total-line">
+                    <span>Total:</span>
+                    <span>₹${saleDetail.total_amount.toFixed(2)}</span>
+                  </div>
+                  ${saleDetail.total_discount > 0 ? `
+                    <div class="total-line">
+                      <span>Discount:</span>
+                      <span>₹${saleDetail.total_discount.toFixed(2)}</span>
+                    </div>
+                  ` : ''}
+                  ${saleDetail.type === 'bill' ? `
+                    <div class="total-line">
+                      <span>SGST:</span>
+                      <span>₹${taxes.sgst.toFixed(2)}</span>
+                    </div>
+                    <div class="total-line">
+                      <span>CGST:</span>
+                      <span>₹${taxes.cgst.toFixed(2)}</span>
+                    </div>
+                  ` : ''}
+                  <div class="total-line final">
+                    <span>Grand Total:</span>
+                    <span>₹${saleDetail.final_amount.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Footer -->
+            <div class="footer-section">
+              <div class="footer-row">
+                <div class="footer-left">
+                  <strong>Terms & Conditions:</strong><br>
+                  1. Goods once sold will not be taken back.<br>
+                  2. All disputes subject to Pune jurisdiction only.
+                </div>
+                <div class="footer-right">
+                  <div>
+                    <div>For KALA VASTRALYA</div>
+                    <br><br><br>
+                    <div>Auth. Signatory</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
   };
   
   // Handle export
@@ -459,6 +751,14 @@ const SalesReport = () => {
                               size="sm"
                             >
                               View
+                            </Button>
+                            <Button
+                              onClick={() => handlePrintSale(sale)}
+                              variant="outline"
+                              size="sm"
+                              className="text-blue-600 hover:text-blue-700"
+                            >
+                              <Printer size={14} />
                             </Button>
                             <Button
                               onClick={() => handleDeleteSale(sale)}
