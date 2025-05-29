@@ -166,7 +166,7 @@ const SalesReport = () => {
   const handlePrintSale = async (sale: Sale) => {
     try {
       // Fetch full sale details including items and remarks
-      const saleDetail = await getSaleByIdApi(sale.id);
+      const saleDetail = await getSaleByIdApi(sale.id) as SaleDetail;
       
       // Generate print content
       const printContent = generatePrintContent(saleDetail);
