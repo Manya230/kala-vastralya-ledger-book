@@ -542,10 +542,23 @@ const SalesReport = () => {
             .footer-left { border-right: 2px solid black; padding: 10px; text-align: center; }
             .footer-right { padding: 10px; text-align: center; display: flex; align-items: flex-end; justify-content: center; }
             @media print { 
-              body { margin: 0; } 
+              body { 
+                margin: 0; 
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              } 
               .no-print { display: none; } 
-              .receipt { margin: 0 auto; border: none; box-shadow: none;}
-              div[style*="max-width: 800px"] { margin: 0 auto; border: none !important; box-shadow: none !important; }
+              .receipt { /* For Bill */
+                margin: 0 auto; 
+                border: 2px solid black !important; 
+                box-shadow: none !important;
+              }
+              /* For Estimate */
+              div[style*="max-width: 800px"][style*="border: 2px solid black"] { 
+                margin: 0 auto !important; 
+                border: 2px solid black !important; 
+                box-shadow: none !important; 
+              }
             }
           </style>
         </head>
