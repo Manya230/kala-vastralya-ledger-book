@@ -183,214 +183,420 @@ const SalesReport = () => {
     }
   };
   
-  // Generate print content - exact copy matching the bill format
+  // Generate print content - updated to match exact formats
   const generatePrintContent = (sale: SaleDetail) => {
-    return `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Print ${sale.type === 'bill' ? 'Bill' : 'Estimate'}</title>
-          <style>
-            body { 
-              font-family: Arial, sans-serif; 
-              margin: 0; 
-              padding: 20px; 
-              font-size: 12px; 
-            }
-            .receipt { 
-              max-width: 800px; 
-              margin: 0 auto; 
-              border: 2px solid black; 
-              border-collapse: collapse;
-            }
-            table {
-              width: 100%;
-              border-collapse: collapse;
-            }
-            td, th {
-              border: 1px solid black;
-              padding: 8px;
-              text-align: left;
-              vertical-align: top;
-            }
-            .header-cell {
-              text-align: center;
-              font-weight: bold;
-              font-size: 16px;
-              padding: 10px;
-            }
-            .contact-info {
-              text-align: center;
-              padding: 8px;
-              font-size: 11px;
-            }
-            .company-name {
-              text-align: center;
-              font-weight: bold;
-              font-size: 18px;
-              padding: 10px;
-            }
-            .customer-header {
-              text-align: center;
-              font-weight: bold;
-              background-color: #f0f0f0;
-            }
-            .right-align {
-              text-align: right;
-            }
-            .center-align {
-              text-align: center;
-            }
-            .items-header {
-              background-color: #f0f0f0;
-              text-align: center;
-              font-weight: bold;
-            }
-            .footer-text {
-              font-size: 10px;
-              padding: 5px;
-            }
-            .signatory {
-              text-align: center;
-              padding: 20px;
-            }
-            @media print { 
-              body { margin: 0; padding: 10px; } 
-            }
-          </style>
-        </head>
-        <body>
-          <div class="receipt">
-            <table>
+    if (sale.type === 'bill') {
+      // Bill format
+      const sgstAmount = (sale.final_amount * 0.025).toFixed(2);
+      const cgstAmount = (sale.final_amount * 0.025).toFixed(2);
+      
+      return `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Print Bill</title>
+            <style>
+              body { 
+                font-family: Arial, sans-serif; 
+                margin: 0; 
+                padding: 20px; 
+                font-size: 14px; 
+                line-height: 1.4;
+              }
+              .container { 
+                max-width: 800px; 
+                margin: 0 auto; 
+                border: 2px solid black;
+                padding: 0;
+              }
+              .header {
+                text-align: center;
+                font-weight: bold;
+                font-size: 24px;
+                padding: 15px;
+                border-bottom: 1px solid black;
+              }
+              .top-info {
+                display: flex;
+                justify-content: space-between;
+                padding: 10px 15px;
+                border-bottom: 1px solid black;
+              }
+              .store-info {
+                text-align: center;
+                padding: 15px;
+                border-bottom: 1px solid black;
+              }
+              .store-name {
+                font-weight: bold;
+                font-size: 20px;
+                margin-bottom: 5px;
+              }
+              .store-address {
+                font-size: 14px;
+              }
+              .customer-bill-section {
+                display: flex;
+                border-bottom: 1px solid black;
+              }
+              .customer-details {
+                flex: 1;
+                padding: 15px;
+                border-right: 1px solid black;
+              }
+              .bill-details {
+                flex: 1;
+                padding: 15px;
+              }
+              .detail-row {
+                margin-bottom: 8px;
+              }
+              .detail-label {
+                font-weight: bold;
+                display: inline-block;
+                width: 100px;
+              }
+              table {
+                width: 100%;
+                border-collapse: collapse;
+                border-bottom: 1px solid black;
+              }
+              th, td {
+                border: 1px solid black;
+                padding: 10px;
+                text-align: center;
+              }
+              th {
+                background-color: #f0f0f0;
+                font-weight: bold;
+              }
+              .item-name {
+                text-align: left;
+              }
+              .amount {
+                text-align: right;
+              }
+              .tax-section {
+                padding: 15px;
+                border-bottom: 1px solid black;
+              }
+              .tax-row {
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 5px;
+              }
+              .total-section {
+                display: flex;
+                flex-direction: column;
+                align-items: flex-end;
+                padding: 15px;
+                border-bottom: 1px solid black;
+              }
+              .total-row {
+                display: flex;
+                justify-content: space-between;
+                width: 300px;
+                margin-bottom: 5px;
+              }
+              .footer {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 20px 15px;
+                min-height: 60px;
+              }
+              .footer-left {
+                text-align: center;
+                flex: 1;
+              }
+              .footer-right {
+                text-align: center;
+                flex: 1;
+              }
+              @media print { 
+                body { margin: 0; padding: 10px; } 
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
               <!-- Header -->
-              <tr>
-                <td class="header-cell" colspan="6">${sale.type === 'bill' ? 'BILL' : 'ESTIMATE'}</td>
-              </tr>
+              <div class="header">BILL</div>
               
-              <!-- Contact and GSTIN Row -->
-              <tr>
-                <td colspan="3">Mob. 8007792000, 9416930965</td>
-                <td colspan="3" class="right-align">GSTIN: 06AEBPY4971P1ZN</td>
-              </tr>
+              <!-- Top Info -->
+              <div class="top-info">
+                <div>Mob. 9053555965, 9416930965</div>
+                <div>GSTIN: 06AEBPY4971P1ZN</div>
+              </div>
               
-              <!-- Company Name -->
-              <tr>
-                <td class="company-name" colspan="6">KALAN VASTRALYA</td>
-              </tr>
+              <!-- Store Info -->
+              <div class="store-info">
+                <div class="store-name">KALAN VASTRALYA</div>
+                <div class="store-address">254B, Opp RJS Plaza, Pataudi Road, Haily Mandi</div>
+              </div>
               
-              <!-- Address -->
-              <tr>
-                <td class="contact-info" colspan="6">254B, Opp RJS Plaza, Pataudi Road, Haily Mandi</td>
-              </tr>
+              <!-- Customer & Bill Info -->
+              <div class="customer-bill-section">
+                <div class="customer-details">
+                  <div class="detail-row">
+                    <span class="detail-label">Name:</span> ${sale.customer_name}
+                  </div>
+                  <div class="detail-row">
+                    <span class="detail-label">Mobile No.:</span> ${sale.mobile || ''}
+                  </div>
+                  <div class="detail-row">
+                    <span class="detail-label">Address:</span> ${sale.customer_address || ''}
+                  </div>
+                  <div class="detail-row">
+                    <span class="detail-label">GSTIN Number:</span> ${sale.customer_gstin || ''}
+                  </div>
+                </div>
+                <div class="bill-details">
+                  <div class="detail-row">
+                    <span class="detail-label">Bill No.:</span> ${sale.number}
+                  </div>
+                  <div class="detail-row">
+                    <span class="detail-label">Date:</span> ${format(new Date(sale.date), 'dd/MM/yyyy hh:mm a')}
+                  </div>
+                </div>
+              </div>
               
-              <!-- Customer Details Header -->
-              <tr>
-                <td class="customer-header" colspan="6">Customer Details</td>
-              </tr>
+              <!-- Items Table -->
+              <table>
+                <thead>
+                  <tr>
+                    <th>Sr. No.</th>
+                    <th>Item</th>
+                    <th>Qty</th>
+                    <th>Rate</th>
+                    <th>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${sale.items.map((item, index) => `
+                    <tr>
+                      <td>${index + 1}</td>
+                      <td class="item-name">${item.category_name}</td>
+                      <td>${item.quantity}</td>
+                      <td class="amount">₹${item.sale_price.toFixed(2)}</td>
+                      <td class="amount">₹${item.item_final_price.toFixed(2)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
               
-              <!-- Customer Info Row 1 -->
-              <tr>
-                <td><strong>Name</strong></td>
-                <td colspan="2">${sale.customer_name}</td>
-                <td><strong>${sale.type === 'bill' ? 'Bill' : 'Estimate'} No.:</strong></td>
-                <td colspan="2">${sale.number}</td>
-              </tr>
+              <!-- Tax Section -->
+              <div class="tax-section">
+                <div class="tax-row">
+                  <span>SGST @ 2.5%:</span>
+                  <span>₹${sgstAmount}</span>
+                </div>
+                <div class="tax-row">
+                  <span>CGST @ 2.5%:</span>
+                  <span>₹${cgstAmount}</span>
+                </div>
+              </div>
               
-              <!-- Customer Info Row 2 -->
-              <tr>
-                <td><strong>Mobile No.</strong></td>
-                <td colspan="2">${sale.mobile || ''}</td>
-                <td><strong>Date:</strong></td>
-                <td colspan="2">${format(new Date(sale.date), 'dd/MM/yyyy, h:mm:ss a')}</td>
-              </tr>
-              
-              <!-- Customer Info Row 3 -->
-              <tr>
-                <td><strong>Address</strong></td>
-                <td colspan="2">${sale.customer_address || ''}</td>
-                <td colspan="3"></td>
-              </tr>
-              
-              <!-- Customer Info Row 4 -->
-              <tr>
-                <td><strong>GSTIN Number</strong></td>
-                <td colspan="2">${sale.customer_gstin || ''}</td>
-                <td colspan="3"></td>
-              </tr>
-              
-              <!-- Items Header -->
-              <tr>
-                <td class="items-header"><strong>Sr. No.</strong></td>
-                <td class="items-header"><strong>Item</strong></td>
-                <td class="items-header"><strong>Qty</strong></td>
-                <td class="items-header"><strong>Rate</strong></td>
-                <td class="items-header"><strong>Amount</strong></td>
-                <td rowspan="${sale.items.length + (sale.type === 'bill' ? 6 : 4)}"></td>
-              </tr>
-              
-              <!-- Items -->
-              ${sale.items.map((item, index) => `
-                <tr>
-                  <td class="center-align">${index + 1}</td>
-                  <td>${item.category_name}</td>
-                  <td class="center-align">${item.quantity}</td>
-                  <td class="right-align">₹ ${item.sale_price}</td>
-                  <td class="right-align">₹ ${item.item_final_price}</td>
-                </tr>
-              `).join('')}
-              
-              ${sale.type === 'bill' ? `
-                <!-- Tax Rows -->
-                <tr>
-                  <td colspan="2"><strong>SGST @ 2.5%</strong></td>
-                  <td colspan="2" class="right-align">₹ ${(sale.final_amount * 0.023881).toFixed(2)}</td>
-                  <td><strong>Total</strong></td>
-                </tr>
-                
-                <tr>
-                  <td colspan="2"><strong>CGST @ 2.5%</strong></td>
-                  <td colspan="2" class="right-align">₹ ${(sale.final_amount * 0.023881).toFixed(2)}</td>
-                  <td class="right-align">₹ ${sale.total_amount}</td>
-                </tr>
-              ` : ''}
-              
-              <!-- Total Discount -->
-              <tr>
-                <td colspan="4"></td>
-                <td><strong>Total Discount</strong></td>
-              </tr>
-              
-              <tr>
-                <td colspan="4"></td>
-                <td class="right-align">₹ ${sale.total_discount || 0}</td>
-              </tr>
-              
-              <!-- Grand Total -->
-              <tr>
-                <td colspan="4"></td>
-                <td><strong>Grand Total (incl taxes)</strong></td>
-              </tr>
-              
-              <tr>
-                <td colspan="4"></td>
-                <td class="right-align">₹ ${sale.final_amount}</td>
-              </tr>
+              <!-- Total Section -->
+              <div class="total-section">
+                <div class="total-row">
+                  <span>Total:</span>
+                  <span>₹${sale.total_amount.toFixed(2)}</span>
+                </div>
+                <div class="total-row">
+                  <span>Total Discount:</span>
+                  <span>₹${sale.total_discount.toFixed(2)}</span>
+                </div>
+                <div class="total-row">
+                  <span><strong>Grand Total (incl taxes):</strong></span>
+                  <span><strong>₹${sale.final_amount.toFixed(2)}</strong></span>
+                </div>
+              </div>
               
               <!-- Footer -->
-              <tr>
-                <td class="footer-text" colspan="3">
+              <div class="footer">
+                <div class="footer-left">
                   Thank you for shopping.<br>
                   (Goods once sold will not be taken back.)
-                </td>
-                <td class="signatory" colspan="3">
+                </div>
+                <div class="footer-right">
                   Auth. Signatory
-                </td>
-              </tr>
-            </table>
-          </div>
-        </body>
-      </html>
-    `;
+                </div>
+              </div>
+            </div>
+          </body>
+        </html>
+      `;
+    } else {
+      // Estimate format
+      return `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Print Estimate</title>
+            <style>
+              body { 
+                font-family: Arial, sans-serif; 
+                margin: 0; 
+                padding: 20px; 
+                font-size: 14px; 
+                line-height: 1.4;
+              }
+              .container { 
+                max-width: 800px; 
+                margin: 0 auto; 
+                border: 2px solid black;
+                padding: 20px;
+              }
+              .header {
+                text-align: center;
+                font-weight: bold;
+                font-size: 24px;
+                margin-bottom: 20px;
+              }
+              .top-section {
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 20px;
+              }
+              .left-info {
+                flex: 1;
+              }
+              .right-info {
+                flex: 1;
+                text-align: right;
+              }
+              .detail-row {
+                margin-bottom: 8px;
+              }
+              .detail-label {
+                font-weight: bold;
+                display: inline-block;
+                width: 120px;
+              }
+              table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 20px;
+                border: 1px solid black;
+              }
+              th, td {
+                border: 1px solid black;
+                padding: 10px;
+                text-align: center;
+              }
+              th {
+                background-color: #f0f0f0;
+                font-weight: bold;
+              }
+              .item-name {
+                text-align: left;
+                font-weight: bold;
+              }
+              .item-code {
+                font-size: 12px;
+                color: #666;
+                font-weight: normal;
+              }
+              .amount {
+                text-align: right;
+              }
+              .summary {
+                background-color: #f5f5f5;
+                padding: 15px;
+                border: 1px solid #ccc;
+                margin-top: 20px;
+              }
+              .summary-row {
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 5px;
+              }
+              .final-amount {
+                font-weight: bold;
+                font-size: 16px;
+              }
+              @media print { 
+                body { margin: 0; padding: 10px; } 
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <!-- Header -->
+              <div class="header">Estimate/Challan</div>
+              
+              <!-- Top Section -->
+              <div class="top-section">
+                <div class="left-info">
+                  <div class="detail-row">
+                    <span class="detail-label">Estimate Number:</span> ${sale.number}
+                  </div>
+                  <div class="detail-row">
+                    <span class="detail-label">Customer:</span> ${sale.customer_name}
+                  </div>
+                  <div class="detail-row">
+                    <span class="detail-label">Mobile:</span> ${sale.mobile || ''}
+                  </div>
+                  <div class="detail-row">
+                    <span class="detail-label">Address:</span> ${sale.customer_address || ''}
+                  </div>
+                  <div class="detail-row">
+                    <span class="detail-label">GSTIN:</span> ${sale.customer_gstin || ''}
+                  </div>
+                </div>
+                <div class="right-info">
+                  <div class="detail-row">
+                    <span class="detail-label">Date:</span> ${format(new Date(sale.date), 'dd/MM/yyyy hh:mm a')}
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Items Table -->
+              <table>
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Qty</th>
+                    <th>Rate</th>
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${sale.items.map((item) => `
+                    <tr>
+                      <td class="item-name">
+                        <div>${item.category_name}</div>
+                        <div class="item-code">${item.barcode}</div>
+                      </td>
+                      <td>${item.quantity}</td>
+                      <td class="amount">₹${item.sale_price.toFixed(2)}</td>
+                      <td class="amount">₹${item.item_final_price.toFixed(2)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+              
+              <!-- Summary Section -->
+              <div class="summary">
+                <div class="summary-row">
+                  <span>Total:</span>
+                  <span>₹${sale.total_amount.toFixed(2)}</span>
+                </div>
+                <div class="summary-row">
+                  <span>Total Discount:</span>
+                  <span>₹${sale.total_discount.toFixed(2)}</span>
+                </div>
+                <div class="summary-row final-amount">
+                  <span>Final Amount:</span>
+                  <span>₹${sale.final_amount.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+          </body>
+        </html>
+      `;
+    }
   };
   
   // Handle export
