@@ -183,21 +183,13 @@ const SalesReport = () => {
     }
   };
   
-  // Generate print content with exact same format as NewSale
-  const generatePrintContent = (saleDetail: SaleDetail) => {
-    const calculateTaxes = (grandTotal: number) => {
-      const sgst = grandTotal * 0.023881;
-      const cgst = grandTotal * 0.023881;
-      return { sgst, cgst };
-    };
-
-    const taxes = saleDetail.type === 'bill' ? calculateTaxes(saleDetail.final_amount) : { sgst: 0, cgst: 0 };
-
+  // Generate print content - exact copy from NewSale page
+  const generatePrintContent = (sale: SaleDetail) => {
     return `
       <!DOCTYPE html>
       <html>
         <head>
-          <title>${saleDetail.type === 'bill' ? 'Bill' : 'Estimate'} - ${saleDetail.number}</title>
+          <title>Print ${sale.type === 'bill' ? 'Bill' : 'Estimate'}</title>
           <style>
             body { 
               font-family: Arial, sans-serif; 
@@ -227,19 +219,6 @@ const SalesReport = () => {
               border-right: 1px solid black; 
             }
             .contact-right { 
-              flex: 1; 
-              padding: 10px; 
-            }
-            .info-row { 
-              display: flex; 
-              border-bottom: 1px solid black; 
-            }
-            .info-left { 
-              flex: 1; 
-              padding: 10px; 
-              border-right: 1px solid black; 
-            }
-            .info-right { 
               flex: 1; 
               padding: 10px; 
             }
@@ -277,10 +256,10 @@ const SalesReport = () => {
               background-color: #f0f0f0; 
               font-weight: bold; 
             }
-            .items-table .text-right { 
+            .text-right { 
               text-align: right; 
             }
-            .items-table .text-center { 
+            .text-center { 
               text-align: center; 
             }
             .totals-section { 
@@ -336,7 +315,7 @@ const SalesReport = () => {
           <div class="receipt">
             <!-- Header -->
             <div class="header">
-              ${saleDetail.type === 'bill' ? 'BILL' : 'ESTIMATE'}
+              ${sale.type === 'bill' ? 'TAX INVOICE' : 'QUOTATION'}
             </div>
             
             <!-- Contact Information -->
@@ -350,9 +329,9 @@ const SalesReport = () => {
                 Email: kalavastralya@gmail.com
               </div>
               <div class="contact-right">
-                <div><strong>${saleDetail.type === 'bill' ? 'Bill' : 'Estimate'} No:</strong> ${saleDetail.number}</div>
-                <div><strong>Date:</strong> ${format(new Date(saleDetail.date), 'dd/MM/yyyy')}</div>
-                ${saleDetail.type === 'bill' ? '<div><strong>GSTIN:</strong> 27ABCDE1234F1Z5</div>' : ''}
+                <div><strong>${sale.type === 'bill' ? 'Invoice' : 'Quotation'} No:</strong> ${sale.number}</div>
+                <div><strong>Date:</strong> ${format(new Date(sale.date), 'dd/MM/yyyy')}</div>
+                ${sale.type === 'bill' ? '<div><strong>GSTIN:</strong> 27ABCDE1234F1Z5</div>' : ''}
               </div>
             </div>
             
@@ -361,13 +340,13 @@ const SalesReport = () => {
               <div class="customer-header">Customer Details</div>
               <div class="customer-row">
                 <div class="customer-left">
-                  <div><strong>Name:</strong> ${saleDetail.customer_name}</div>
-                  ${saleDetail.mobile ? `<div><strong>Mobile:</strong> ${saleDetail.mobile}</div>` : ''}
-                  ${saleDetail.customer_address ? `<div><strong>Address:</strong> ${saleDetail.customer_address}</div>` : ''}
+                  <div><strong>Name:</strong> ${sale.customer_name}</div>
+                  ${sale.mobile ? `<div><strong>Mobile:</strong> ${sale.mobile}</div>` : ''}
+                  ${sale.customer_address ? `<div><strong>Address:</strong> ${sale.customer_address}</div>` : ''}
                 </div>
                 <div class="customer-right">
-                  ${saleDetail.customer_gstin ? `<div><strong>GSTIN:</strong> ${saleDetail.customer_gstin}</div>` : ''}
-                  ${saleDetail.payment_mode ? `<div><strong>Payment Mode:</strong> ${saleDetail.payment_mode}</div>` : ''}
+                  ${sale.customer_gstin ? `<div><strong>GSTIN:</strong> ${sale.customer_gstin}</div>` : ''}
+                  ${sale.payment_mode ? `<div><strong>Payment Mode:</strong> ${sale.payment_mode}</div>` : ''}
                 </div>
               </div>
             </div>
@@ -384,7 +363,7 @@ const SalesReport = () => {
                 </tr>
               </thead>
               <tbody>
-                ${saleDetail.items.map((item, index) => `
+                ${sale.items.map((item, index) => `
                   <tr>
                     <td class="text-center">${index + 1}</td>
                     <td>${item.category_name}</td>
@@ -400,32 +379,32 @@ const SalesReport = () => {
             <div class="totals-section">
               <div class="totals-row">
                 <div class="totals-left">
-                  ${saleDetail.remarks ? `<div><strong>Remarks:</strong> ${saleDetail.remarks}</div>` : ''}
+                  ${sale.remarks ? `<div><strong>Remarks:</strong> ${sale.remarks}</div>` : ''}
                 </div>
                 <div class="totals-right">
                   <div class="total-line">
                     <span>Total:</span>
-                    <span>₹${saleDetail.total_amount.toFixed(2)}</span>
+                    <span>₹${sale.total_amount.toFixed(2)}</span>
                   </div>
-                  ${saleDetail.total_discount > 0 ? `
+                  ${sale.total_discount > 0 ? `
                     <div class="total-line">
                       <span>Discount:</span>
-                      <span>₹${saleDetail.total_discount.toFixed(2)}</span>
+                      <span>₹${sale.total_discount.toFixed(2)}</span>
                     </div>
                   ` : ''}
-                  ${saleDetail.type === 'bill' ? `
+                  ${sale.type === 'bill' ? `
                     <div class="total-line">
-                      <span>SGST:</span>
-                      <span>₹${taxes.sgst.toFixed(2)}</span>
+                      <span>SGST @ 2.5%:</span>
+                      <span>₹${(sale.final_amount * 0.025).toFixed(2)}</span>
                     </div>
                     <div class="total-line">
-                      <span>CGST:</span>
-                      <span>₹${taxes.cgst.toFixed(2)}</span>
+                      <span>CGST @ 2.5%:</span>
+                      <span>₹${(sale.final_amount * 0.025).toFixed(2)}</span>
                     </div>
                   ` : ''}
                   <div class="total-line final">
-                    <span>Grand Total:</span>
-                    <span>₹${saleDetail.final_amount.toFixed(2)}</span>
+                    <span>${sale.type === 'bill' ? 'Grand Total:' : 'Total Amount:'}</span>
+                    <span>₹${sale.final_amount.toFixed(2)}</span>
                   </div>
                 </div>
               </div>
@@ -443,7 +422,7 @@ const SalesReport = () => {
                   <div>
                     <div>For KALA VASTRALYA</div>
                     <br><br><br>
-                    <div>Auth. Signatory</div>
+                    <div>Authorized Signatory</div>
                   </div>
                 </div>
               </div>
