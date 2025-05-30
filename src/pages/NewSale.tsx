@@ -441,6 +441,8 @@ const NewSale = () => {
             }
             .taxes { 
               border-right: 2px solid black; 
+              display: flex; /* For flex-grow to work */
+              flex-direction: column; /* Stack items vertically */
             }
             .tax-row { 
               display: grid; 
@@ -498,24 +500,24 @@ const NewSale = () => {
         </head>
         <body>
           ${isEstimate ? `
-            <div style="max-width: 800px; margin: 0 auto; padding: 20px;">
-              <h1 style="text-align: center; margin-bottom: 20px;">Estimate/Challan</h1>
+            <div style="max-width: 800px; margin: 0 auto; padding: 20px; background: white; font-family: Arial, sans-serif; border: 2px solid black;">
+              <h1 style="text-align: center; margin-bottom: 20px; font-size: 24px;">Estimate/Challan</h1>
               
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; font-size: 14px;">
                 <div>
                   <p style="margin: 5px 0;"><strong>Estimate Number:</strong> ${receiptData.number}</p>
-                  <p style="margin: 5px 0;"><strong>Customer:</strong> ${receiptData.customer_name}</p>
+                  <p style="margin: 5px 0;"><strong>Customer:</strong> ${receiptData.customer_name || ''}</p>
                   ${receiptData.mobile ? `<p style="margin: 5px 0;"><strong>Mobile:</strong> ${receiptData.mobile}</p>` : ''}
                   ${receiptData.customer_address ? `<p style="margin: 5px 0;"><strong>Address:</strong> ${receiptData.customer_address}</p>` : ''}
                   ${receiptData.customer_gst_number ? `<p style="margin: 5px 0;"><strong>GSTIN:</strong> ${receiptData.customer_gst_number}</p>` : ''}
                 </div>
-                <div>
-                  <p style="margin: 5px 0;"><strong>Date:</strong> ${new Date(receiptData.date).toLocaleDateString()}, ${new Date(receiptData.date).toLocaleTimeString()}</p>
+                <div style="text-align: right;">
+                  <p style="margin: 5px 0;"><strong>Date:</strong> ${new Date(receiptData.date).toLocaleDateString('en-GB')}, ${new Date(receiptData.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}</p>
                   ${receiptData.payment_mode ? `<p style="margin: 5px 0;"><strong>Payment Mode:</strong> ${receiptData.payment_mode}</p>` : ''}
                 </div>
               </div>
               
-              <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+              <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px;">
                 <thead>
                   <tr style="background-color: #f5f5f5;">
                     <th style="border: 1px solid black; padding: 10px; text-align: left;">Item</th>
@@ -525,34 +527,34 @@ const NewSale = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  ${receiptData.items.map((item, index) => `
+                  ${(receiptData.items || []).map((item: CartItem, index: number) => `
                     <tr>
                       <td style="border: 1px solid black; padding: 10px;">
                         <div style="font-weight: bold;">${item.category_name}</div>
-                        <div style="font-size: 12px; color: #666;">${item.barcode}</div>
+                        ${item.barcode ? `<div style="font-size: 12px; color: #666;">${item.barcode}</div>` : ''}
                       </td>
                       <td style="border: 1px solid black; padding: 10px; text-align: center;">${item.quantity}</td>
                       <td style="border: 1px solid black; padding: 10px; text-align: right;">₹${(item.sale_price ?? 0).toFixed(2)}</td>
-                      <td style="border: 1px solid black; padding: 10px; text-align: right;">₹${(item.item_final_price ?? 0).toFixed(2)}</td>
+                      <td style="border: 1px solid black; padding: 10px; text-align: right;">₹${((item.sale_price * item.quantity) ?? 0).toFixed(2)}</td>
                     </tr>
                   `).join('')}
                 </tbody>
               </table>
               
-              <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px;">
+              <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; font-size: 14px;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
                   <span>Total:</span>
-                  <span>₹${receiptData.total_amount.toFixed(2)}</span>
+                  <span>₹${(receiptData.total_amount ?? 0).toFixed(2)}</span>
                 </div>
-                ${receiptData.total_discount > 0 ? `
+                ${(receiptData.total_discount ?? 0) > 0 ? `
                   <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
                     <span>Total Discount:</span>
-                    <span>₹${receiptData.total_discount.toFixed(2)}</span>
+                    <span>₹${(receiptData.total_discount ?? 0).toFixed(2)}</span>
                   </div>
                 ` : ''}
                 <div style="display: flex; justify-content: space-between; font-weight: bold;">
                   <span>Final Amount:</span>
-                  <span>₹${receiptData.final_amount.toFixed(2)}</span>
+                  <span>₹${(receiptData.final_amount ?? 0).toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -574,7 +576,7 @@ const NewSale = () => {
                   <div class="customer-header">Customer Details</div>
                   <div class="customer-row">
                     <div class="customer-label">Name</div>
-                    <div class="customer-value">${receiptData.customer_name}</div>
+                    <div class="customer-value">${receiptData.customer_name || ''}</div>
                   </div>
                   ${receiptData.mobile ? `
                     <div class="customer-row">
@@ -597,10 +599,10 @@ const NewSale = () => {
                 </div>
                 <div class="bill-info">
                   <div class="bill-info-item">
-                    <strong>Bill No.: </strong>${receiptData.number}
+                    <strong>Bill No.:&nbsp;</strong>${receiptData.number}
                   </div>
                   <div class="bill-info-item">
-                    <strong>Date: </strong>${new Date(receiptData.date).toLocaleDateString()}, ${new Date(receiptData.date).toLocaleTimeString()}
+                    <strong>Date:&nbsp;</strong>${new Date(receiptData.date).toLocaleDateString('en-GB')}, ${new Date(receiptData.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
                   </div>
                 </div>
               </div>
@@ -616,13 +618,13 @@ const NewSale = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  ${receiptData.items.map((item, index) => `
+                  ${(receiptData.items || []).map((item: CartItem, index: number) => `
                     <tr>
                       <td>${index + 1}</td>
                       <td>${item.category_name}</td>
                       <td class="text-center">${item.quantity}</td>
                       <td class="text-right">₹ ${(item.sale_price ?? 0).toFixed(0)}</td>
-                      <td class="text-right">₹ ${(item.item_final_price ?? 0).toFixed(0)}</td>
+                      <td class="text-right">₹ ${((item.sale_price * item.quantity) ?? 0).toFixed(0)}</td>
                     </tr>
                   `).join('')}
                 </tbody>
@@ -633,27 +635,27 @@ const NewSale = () => {
                   <div style="flex-grow: 1;"></div>
                   <div class="tax-row">
                     <div class="tax-label">SGST @ 2.5%</div>
-                    <div class="tax-value">₹ ${(receiptData.final_amount * 0.023881).toFixed(2)}</div>
+                    <div class="tax-value">₹ ${( (receiptData.final_amount ?? 0) * 0.02388095238).toFixed(2)}</div>
                   </div>
                   <div class="tax-row" style="border-top: none;">
                     <div class="tax-label">CGST @ 2.5%</div>
-                    <div class="tax-value">₹ ${(receiptData.final_amount * 0.023881).toFixed(2)}</div>
+                    <div class="tax-value">₹ ${( (receiptData.final_amount ?? 0) * 0.02388095238).toFixed(2)}</div>
                   </div>
                 </div>
                 <div>
                   <div class="total-row">
                     <div class="total-label">Total</div>
-                    <div class="total-value">₹ ${receiptData.total_amount.toFixed(0)}</div>
+                    <div class="total-value">₹ ${(receiptData.total_amount ?? 0).toFixed(0)}</div>
                   </div>
-                  ${receiptData.total_discount > 0 ? `
+                  ${(receiptData.total_discount ?? 0) > 0 ? `
                     <div class="total-row">
                       <div class="total-label">Total Discount</div>
-                      <div class="total-value">₹ ${receiptData.total_discount.toFixed(0)}</div>
+                      <div class="total-value">₹ ${(receiptData.total_discount ?? 0).toFixed(0)}</div>
                     </div>
                   ` : ''}
                   <div class="total-row" style="border-bottom: none;">
                     <div class="total-label">Grand Total (incl taxes)</div>
-                    <div class="total-value">₹ ${receiptData.final_amount.toFixed(0)}</div>
+                    <div class="total-value">₹ ${(receiptData.final_amount ?? 0).toFixed(0)}</div>
                   </div>
                 </div>
               </div>
