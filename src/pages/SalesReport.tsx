@@ -210,7 +210,7 @@ const SalesReport = () => {
   // Calculate totals
   const getTotalAmount = () => {
     return sales
-      .reduce((sum: number, sale: Sale) => sum + sale.final_amount, 0)
+      .reduce((sum: number, sale: any) => sum + (sale.final_amount ?? 0), 0)
       .toFixed(2);
   };
 
@@ -682,7 +682,7 @@ const SalesReport = () => {
                       <td colSpan={7} className="px-4 py-4 text-center">No sales found</td>
                     </tr>
                   ) : (
-                    sales.map((sale: Sale) => (
+                    sales.map((sale) => (
                       <tr
                         key={sale.id}
                         className="border-t hover:bg-gray-50"
@@ -725,7 +725,12 @@ const SalesReport = () => {
                               View
                             </Button>
                             <Button
-                              onClick={() => handleDeleteSale(sale)}
+                              onClick={() =>
+                                handleDeleteSale({
+                                  ...sale,
+                                  type: sale.type === 'bill' ? 'bill' : 'estimate'
+                                })
+                              }
                               variant="outline"
                               size="sm"
                               className="text-red-600 hover:text-red-700"

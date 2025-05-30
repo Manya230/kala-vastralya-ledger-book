@@ -535,7 +535,7 @@ const NewSale = () => {
                       </td>
                       <td style="border: 1px solid black; padding: 10px; text-align: center;">${item.quantity}</td>
                       <td style="border: 1px solid black; padding: 10px; text-align: right;">₹${(item.sale_price ?? 0).toFixed(2)}</td>
-                      <td style="border: 1px solid black; padding: 10px; text-align: right;">₹${((item.sale_price * item.quantity) ?? 0).toFixed(2)}</td>
+                      <td style="border: 1px solid black; padding: 10px; text-align: right;">₹${(item.sale_price * item.quantity).toFixed(2)}</td>
                     </tr>
                   `).join('')}
                 </tbody>
@@ -624,7 +624,7 @@ const NewSale = () => {
                       <td>${item.category_name}</td>
                       <td class="text-center">${item.quantity}</td>
                       <td class="text-right">₹ ${(item.sale_price ?? 0).toFixed(0)}</td>
-                      <td class="text-right">₹ ${((item.sale_price * item.quantity) ?? 0).toFixed(0)}</td>
+                      <td class="text-right">₹ ${(item.sale_price * item.quantity).toFixed(0)}</td>
                     </tr>
                   `).join('')}
                 </tbody>
