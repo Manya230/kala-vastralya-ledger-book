@@ -183,7 +183,7 @@ const SalesReport = () => {
     }
   };
   
-  // Generate print content with same format as NewSale
+  // Generate print content with exact same format as NewSale
   const generatePrintContent = (saleDetail: SaleDetail) => {
     const calculateTaxes = (grandTotal: number) => {
       const sgst = grandTotal * 0.023881;
@@ -784,14 +784,6 @@ const SalesReport = () => {
       <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader className="relative">
-            {/* <Button
-              variant="ghost"
-              size="icon"
-              className="absolute right-0 top-0"
-              onClick={() => setIsDetailsOpen(false)}
-            >
-              <X size={16} />
-            </Button> */}
             <DialogTitle>
               {saleDetail ? (
                 <>
