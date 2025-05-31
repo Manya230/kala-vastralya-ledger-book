@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { getSalesApi, getSaleByIdApi, exportSalesApi, updateSaleApi, updateProductQuantityApi, deleteSaleApi } from '@/lib/api';
-import { Search, Calendar, FileDown, X, Plus, Minus, Trash2 } from 'lucide-react';
+import { Search, Calendar, FileDown, X, Plus, Minus, Trash2, Edit, Check } from 'lucide-react';
 
 interface Sale {
   id: number;
@@ -60,6 +60,10 @@ const SalesReport = () => {
   const [selectedSaleId, setSelectedSaleId] = useState<number | null>(null);
   const [editedItems, setEditedItems] = useState<SaleItem[]>([]);
   const [isEditing, setIsEditing] = useState(false);
+  const [isEditingDiscount, setIsEditingDiscount] = useState(false);
+  const [editedDiscount, setEditedDiscount] = useState<number>(0);
+  const [editingRateIndex, setEditingRateIndex] = useState<number | null>(null);
+  const [editedRate, setEditedRate] = useState<number>(0);
   
   // Delete confirmation state
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -104,14 +108,16 @@ const SalesReport = () => {
     gcTime: 0
   });
 
-  // Effect to set edited items when sale detail changes
+  // Effect to set edited items and discount when sale detail changes
   useEffect(() => {
     if (saleDetail && saleDetail.items) {
       console.log('Setting edited items from data:', saleDetail.items);
       setEditedItems(saleDetail.items);
+      setEditedDiscount(saleDetail.total_discount || 0);
     } else {
       console.log('No items found in sale detail');
       setEditedItems([]);
+      setEditedDiscount(0);
     }
   }, [saleDetail]);
   
@@ -125,6 +131,8 @@ const SalesReport = () => {
       queryClient.invalidateQueries({ queryKey: ['sale', selectedSaleId] });
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       setIsEditing(false);
+      setIsEditingDiscount(false);
+      setEditingRateIndex(null);
     },
     onError: (error) => {
       console.error('Error updating sale:', error);
@@ -163,6 +171,8 @@ const SalesReport = () => {
     setSelectedSaleId(id);
     setIsDetailsOpen(true);
     setIsEditing(false);
+    setIsEditingDiscount(false);
+    setEditingRateIndex(null);
   };
   
   // Handle export
@@ -220,9 +230,8 @@ const SalesReport = () => {
 
     const updatedItems = [...editedItems];
     const item = updatedItems[index];
-    const currentQuantity = item.quantity;
     
-    // Update the item quantity
+    // Update the item quantity and recalculate final price
     updatedItems[index] = {
       ...item,
       quantity: newQuantity,
@@ -230,6 +239,67 @@ const SalesReport = () => {
     };
     
     setEditedItems(updatedItems);
+  };
+
+  // Handle update item rate
+  const handleUpdateItemRate = (index: number, newRate: number) => {
+    if (newRate < 0) return;
+
+    const updatedItems = [...editedItems];
+    const item = updatedItems[index];
+    
+    // Update the item rate and recalculate final price
+    updatedItems[index] = {
+      ...item,
+      sale_price: newRate,
+      item_final_price: newRate * item.quantity
+    };
+    
+    setEditedItems(updatedItems);
+  };
+
+  // Handle start editing rate
+  const handleStartEditingRate = (index: number, currentRate: number) => {
+    setEditingRateIndex(index);
+    setEditedRate(currentRate);
+  };
+
+  // Handle save rate changes
+  const handleSaveRateChanges = async (index: number) => {
+    handleUpdateItemRate(index, editedRate);
+    
+    // Calculate new totals
+    const updatedItems = [...editedItems];
+    updatedItems[index] = {
+      ...updatedItems[index],
+      sale_price: editedRate,
+      item_final_price: editedRate * updatedItems[index].quantity
+    };
+    
+    const total = updatedItems.reduce((sum, item) => sum + item.item_final_price, 0);
+    const discount = saleDetail ? saleDetail.total_discount : 0;
+    const final = total - discount;
+    
+    // Save to database
+    if (selectedSaleId) {
+      await updateSaleMutation.mutateAsync({
+        id: selectedSaleId,
+        updatedSale: {
+          total_amount: total,
+          total_discount: discount,
+          final_amount: final,
+          items: updatedItems
+        }
+      });
+    }
+    
+    setEditingRateIndex(null);
+  };
+
+  // Handle cancel rate editing
+  const handleCancelRateEditing = () => {
+    setEditingRateIndex(null);
+    setEditedRate(0);
   };
 
   // Handle remove item
@@ -241,13 +311,31 @@ const SalesReport = () => {
     setEditedItems(updatedItems);
   };
 
-  // Calculate totals for edited items
+  // Calculate totals for edited items with current discount
   const calculateEditedTotals = () => {
     const total = editedItems.reduce((sum, item) => sum + item.item_final_price, 0);
-    const discount = saleDetail ? saleDetail.total_discount : 0;
+    const discount = isEditingDiscount ? editedDiscount : (saleDetail ? saleDetail.total_discount : 0);
     const final = total - discount;
     
     return { total, discount, final };
+  };
+
+  // Handle save discount changes
+  const handleSaveDiscountChanges = async () => {
+    if (!saleDetail || !selectedSaleId) return;
+    
+    const { total } = calculateEditedTotals();
+    const final = total - editedDiscount;
+    
+    await updateSaleMutation.mutateAsync({
+      id: selectedSaleId,
+      updatedSale: {
+        total_amount: total,
+        total_discount: editedDiscount,
+        final_amount: final,
+        items: editedItems
+      }
+    });
   };
 
   // Handle save changes
@@ -256,31 +344,7 @@ const SalesReport = () => {
     
     const { total, discount, final } = calculateEditedTotals();
     
-    // Prepare inventory updates by comparing original vs edited items
-    const originalItems = saleDetail.items;
-    const inventoryUpdates: { productId: number, quantityChange: number }[] = [];
-    
-    // Calculate quantity changes for existing items
-    editedItems.forEach(editedItem => {
-      const originalItem = originalItems.find(oi => oi.product_id === editedItem.product_id);
-      if (originalItem) {
-        // Positive change means we need to add back to inventory, negative means remove from inventory
-        const quantityChange = originalItem.quantity - editedItem.quantity;
-        if (quantityChange !== 0) {
-          inventoryUpdates.push({ productId: editedItem.product_id, quantityChange });
-        }
-      }
-    });
-    
-    // Handle completely removed items - add their full quantity back to inventory
-    originalItems.forEach(originalItem => {
-      const stillExists = editedItems.some(ei => ei.product_id === originalItem.product_id);
-      if (!stillExists) {
-        inventoryUpdates.push({ productId: originalItem.product_id, quantityChange: originalItem.quantity });
-      }
-    });
-    
-    // Update the sale first
+    // Update the sale
     await updateSaleMutation.mutateAsync({
       id: selectedSaleId,
       updatedSale: {
@@ -290,26 +354,6 @@ const SalesReport = () => {
         items: editedItems
       }
     });
-    
-    // Update inventory quantities
-    // for (const update of inventoryUpdates) {
-    //   try {
-    //     // Get current quantity first
-    //     const currentProduct = await fetch(`http://localhost:3001/api/products/${update.productId}`);
-    //     if (currentProduct.ok) {
-    //       const productData = await currentProduct.json();
-    //       const newQuantity = productData.quantity + update.quantityChange;
-          
-    //       await updateQuantityMutation.mutateAsync({
-    //         id: update.productId,
-    //         quantity: newQuantity
-    //       });
-    //     }
-    //   } catch (error) {
-    //     console.error(`Failed to update inventory for product ${update.productId}:`, error);
-    //     toast.error(`Failed to update inventory for one of the products`);
-    //   }
-    // }
   };
   
   // Calculate SGST and CGST
@@ -774,14 +818,6 @@ const SalesReport = () => {
       <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader className="relative">
-            {/* <Button
-              variant="ghost"
-              size="icon"
-              className="absolute right-0 top-0"
-              onClick={() => setIsDetailsOpen(false)}
-            >
-              <X size={16} />
-            </Button> */}
             <DialogTitle>
               {saleDetail ? (
                 <>
@@ -851,12 +887,12 @@ const SalesReport = () => {
               <div className="flex justify-between items-center mb-2">
                 <p className="font-medium">Items:</p>
                 {!isEditing ? (
-                  <Button onClick={() => setIsEditing(true)} variant="outline" size="sm">
+                  <Button onClick={() => setIsEditing(true)} variant="outline" size="sm" className="bg-gray-100 hover:bg-gray-200">
                     Edit Items
                   </Button>
                 ) : (
                   <div className="flex gap-2">
-                    <Button onClick={() => setIsEditing(false)} variant="outline" size="sm">
+                    <Button onClick={() => setIsEditing(false)} variant="outline" size="sm" className="bg-gray-100 hover:bg-gray-200">
                       Cancel
                     </Button>
                     <Button onClick={handleSaveChanges} size="sm">
@@ -907,7 +943,48 @@ const SalesReport = () => {
                               item.quantity
                             )}
                           </td>
-                          <td className="px-4 py-2 text-right">₹{item.sale_price.toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">
+                            {editingRateIndex === index ? (
+                              <div className="flex items-center justify-end gap-1">
+                                <Input
+                                  type="number"
+                                  value={editedRate}
+                                  onChange={(e) => setEditedRate(parseFloat(e.target.value) || 0)}
+                                  className="w-20 h-8 text-right [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                  style={{ MozAppearance: 'textfield' }}
+                                  step="0.01"
+                                  min="0"
+                                />
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleSaveRateChanges(index)}
+                                  className="h-8 px-2"
+                                >
+                                  <Check size={14} />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={handleCancelRateEditing}
+                                  className="h-8 px-2 bg-gray-100 hover:bg-gray-200"
+                                >
+                                  <X size={14} />
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-end gap-1">
+                                <span>₹{item.sale_price.toFixed(2)}</span>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleStartEditingRate(index, item.sale_price)}
+                                  className="h-8 px-2 bg-gray-100 hover:bg-gray-200"
+                                >
+                                  <Edit size={14} />
+                                </Button>
+                              </div>
+                            )}
+                          </td>
                           <td className="px-4 py-2 text-right">₹{item.item_final_price.toFixed(2)}</td>
                           {isEditing && (
                             <td className="px-4 py-2">
@@ -934,19 +1011,61 @@ const SalesReport = () => {
               </div>
               
               <div className="bg-gray-50 p-4 rounded">
-                {isEditing ? (
+                {isEditing || isEditingDiscount ? (
                   <>
                     <div className="flex justify-between mb-1">
                       <span>Total:</span>
                       <span>₹{calculateEditedTotals().total.toFixed(2)}</span>
                     </div>
                     
-                    {saleDetail.total_discount > 0 && (
-                      <div className="flex justify-between mb-1">
-                        <span>Total Discount:</span>
-                        <span>₹{saleDetail.total_discount.toFixed(2)}</span>
+                    <div className="flex justify-between items-center mb-1">
+                      <span>Total Discount:</span>
+                      <div className="flex items-center gap-2">
+                        {isEditingDiscount ? (
+                          <>
+                            <Input
+                              type="number"
+                              value={editedDiscount}
+                              onChange={(e) => setEditedDiscount(parseFloat(e.target.value) || 0)}
+                              className="w-20 h-8 text-right [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                              style={{ MozAppearance: 'textfield' }}
+                              step="0.01"
+                              min="0"
+                            />
+                            <Button
+                              size="sm"
+                              onClick={handleSaveDiscountChanges}
+                              className="h-8 px-2"
+                            >
+                              <Check size={14} />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setIsEditingDiscount(false);
+                                setEditedDiscount(saleDetail.total_discount || 0);
+                              }}
+                              className="h-8 px-2 bg-gray-100 hover:bg-gray-200"
+                            >
+                              <X size={14} />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <span>₹{(saleDetail.total_discount || 0).toFixed(2)}</span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setIsEditingDiscount(true)}
+                              className="h-8 px-2 bg-gray-100 hover:bg-gray-200"
+                            >
+                              <Edit size={14} />
+                            </Button>
+                          </>
+                        )}
                       </div>
-                    )}
+                    </div>
                     
                     {saleDetail.type === 'bill' && (
                       <>
@@ -973,12 +1092,20 @@ const SalesReport = () => {
                       <span>₹{saleDetail.total_amount.toFixed(2)}</span>
                     </div>
                     
-                    {saleDetail.total_discount > 0 && (
-                      <div className="flex justify-between mb-1">
-                        <span>Total Discount:</span>
-                        <span>₹{saleDetail.total_discount.toFixed(2)}</span>
+                    <div className="flex justify-between items-center mb-1">
+                      <span>Total Discount:</span>
+                      <div className="flex items-center gap-2">
+                        <span>₹{(saleDetail.total_discount || 0).toFixed(2)}</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setIsEditingDiscount(true)}
+                          className="h-8 px-2 bg-gray-100 hover:bg-gray-200"
+                        >
+                          <Edit size={14} />
+                        </Button>
                       </div>
-                    )}
+                    </div>
                     
                     {saleDetail.type === 'bill' && (
                       <>
