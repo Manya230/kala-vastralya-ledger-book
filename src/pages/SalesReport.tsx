@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { getSalesApi, getSaleByIdApi, exportSalesApi, updateSaleApi, updateProductQuantityApi, deleteSaleApi } from '@/lib/api';
-import { Search, Calendar, FileDown, X, Plus, Minus, Trash2 } from 'lucide-react';
+import { Search, Calendar, FileDown, X, Plus, Minus, Trash2, Edit, Check } from 'lucide-react';
 
 interface Sale {
   id: number;
@@ -60,6 +60,8 @@ const SalesReport = () => {
   const [selectedSaleId, setSelectedSaleId] = useState<number | null>(null);
   const [editedItems, setEditedItems] = useState<SaleItem[]>([]);
   const [isEditing, setIsEditing] = useState(false);
+  const [isEditingDiscount, setIsEditingDiscount] = useState(false);
+  const [editedDiscount, setEditedDiscount] = useState<number>(0);
   
   // Delete confirmation state
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -104,14 +106,16 @@ const SalesReport = () => {
     gcTime: 0
   });
 
-  // Effect to set edited items when sale detail changes
+  // Effect to set edited items and discount when sale detail changes
   useEffect(() => {
     if (saleDetail && saleDetail.items) {
       console.log('Setting edited items from data:', saleDetail.items);
       setEditedItems(saleDetail.items);
+      setEditedDiscount(saleDetail.total_discount || 0);
     } else {
       console.log('No items found in sale detail');
       setEditedItems([]);
+      setEditedDiscount(0);
     }
   }, [saleDetail]);
   
@@ -125,6 +129,7 @@ const SalesReport = () => {
       queryClient.invalidateQueries({ queryKey: ['sale', selectedSaleId] });
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       setIsEditing(false);
+      setIsEditingDiscount(false);
     },
     onError: (error) => {
       console.error('Error updating sale:', error);
@@ -163,6 +168,7 @@ const SalesReport = () => {
     setSelectedSaleId(id);
     setIsDetailsOpen(true);
     setIsEditing(false);
+    setIsEditingDiscount(false);
   };
   
   // Handle export
@@ -241,13 +247,31 @@ const SalesReport = () => {
     setEditedItems(updatedItems);
   };
 
-  // Calculate totals for edited items
+  // Calculate totals for edited items with current discount
   const calculateEditedTotals = () => {
     const total = editedItems.reduce((sum, item) => sum + item.item_final_price, 0);
-    const discount = saleDetail ? saleDetail.total_discount : 0;
+    const discount = isEditingDiscount ? editedDiscount : (saleDetail ? saleDetail.total_discount : 0);
     const final = total - discount;
     
     return { total, discount, final };
+  };
+
+  // Handle save discount changes
+  const handleSaveDiscountChanges = async () => {
+    if (!saleDetail || !selectedSaleId) return;
+    
+    const { total } = calculateEditedTotals();
+    const final = total - editedDiscount;
+    
+    await updateSaleMutation.mutateAsync({
+      id: selectedSaleId,
+      updatedSale: {
+        total_amount: total,
+        total_discount: editedDiscount,
+        final_amount: final,
+        items: editedItems
+      }
+    });
   };
 
   // Handle save changes
@@ -774,14 +798,6 @@ const SalesReport = () => {
       <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader className="relative">
-            {/* <Button
-              variant="ghost"
-              size="icon"
-              className="absolute right-0 top-0"
-              onClick={() => setIsDetailsOpen(false)}
-            >
-              <X size={16} />
-            </Button> */}
             <DialogTitle>
               {saleDetail ? (
                 <>
@@ -934,19 +950,60 @@ const SalesReport = () => {
               </div>
               
               <div className="bg-gray-50 p-4 rounded">
-                {isEditing ? (
+                {isEditing || isEditingDiscount ? (
                   <>
                     <div className="flex justify-between mb-1">
                       <span>Total:</span>
                       <span>₹{calculateEditedTotals().total.toFixed(2)}</span>
                     </div>
                     
-                    {saleDetail.total_discount > 0 && (
-                      <div className="flex justify-between mb-1">
-                        <span>Total Discount:</span>
-                        <span>₹{saleDetail.total_discount.toFixed(2)}</span>
+                    <div className="flex justify-between items-center mb-1">
+                      <span>Total Discount:</span>
+                      <div className="flex items-center gap-2">
+                        {isEditingDiscount ? (
+                          <>
+                            <Input
+                              type="number"
+                              value={editedDiscount}
+                              onChange={(e) => setEditedDiscount(parseFloat(e.target.value) || 0)}
+                              className="w-20 h-8 text-right"
+                              step="0.01"
+                              min="0"
+                            />
+                            <Button
+                              size="sm"
+                              onClick={handleSaveDiscountChanges}
+                              className="h-8 px-2"
+                            >
+                              <Check size={14} />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setIsEditingDiscount(false);
+                                setEditedDiscount(saleDetail.total_discount || 0);
+                              }}
+                              className="h-8 px-2"
+                            >
+                              <X size={14} />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <span>₹{(saleDetail.total_discount || 0).toFixed(2)}</span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setIsEditingDiscount(true)}
+                              className="h-8 px-2"
+                            >
+                              <Edit size={14} />
+                            </Button>
+                          </>
+                        )}
                       </div>
-                    )}
+                    </div>
                     
                     {saleDetail.type === 'bill' && (
                       <>
@@ -973,12 +1030,20 @@ const SalesReport = () => {
                       <span>₹{saleDetail.total_amount.toFixed(2)}</span>
                     </div>
                     
-                    {saleDetail.total_discount > 0 && (
-                      <div className="flex justify-between mb-1">
-                        <span>Total Discount:</span>
-                        <span>₹{saleDetail.total_discount.toFixed(2)}</span>
+                    <div className="flex justify-between items-center mb-1">
+                      <span>Total Discount:</span>
+                      <div className="flex items-center gap-2">
+                        <span>₹{(saleDetail.total_discount || 0).toFixed(2)}</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setIsEditingDiscount(true)}
+                          className="h-8 px-2"
+                        >
+                          <Edit size={14} />
+                        </Button>
                       </div>
-                    )}
+                    </div>
                     
                     {saleDetail.type === 'bill' && (
                       <>
