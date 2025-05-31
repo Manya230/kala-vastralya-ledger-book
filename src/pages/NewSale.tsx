@@ -299,7 +299,7 @@ const NewSale = () => {
       id: 0, // temporary id
       type,
       number: properNumber,
-      customer_name: customerName,
+      customer_name: customerName || 'Walk In Customer',
       mobile: mobileNumber,
       customer_address: customerAddress,
       customer_gst_number: customerGstNumber,
