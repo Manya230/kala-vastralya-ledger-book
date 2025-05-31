@@ -62,6 +62,8 @@ const SalesReport = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [isEditingDiscount, setIsEditingDiscount] = useState(false);
   const [editedDiscount, setEditedDiscount] = useState<number>(0);
+  const [editingRateIndex, setEditingRateIndex] = useState<number | null>(null);
+  const [editedRate, setEditedRate] = useState<number>(0);
   
   // Delete confirmation state
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -130,6 +132,7 @@ const SalesReport = () => {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       setIsEditing(false);
       setIsEditingDiscount(false);
+      setEditingRateIndex(null);
     },
     onError: (error) => {
       console.error('Error updating sale:', error);
@@ -169,6 +172,7 @@ const SalesReport = () => {
     setIsDetailsOpen(true);
     setIsEditing(false);
     setIsEditingDiscount(false);
+    setEditingRateIndex(null);
   };
   
   // Handle export
@@ -226,9 +230,8 @@ const SalesReport = () => {
 
     const updatedItems = [...editedItems];
     const item = updatedItems[index];
-    const currentQuantity = item.quantity;
     
-    // Update the item quantity
+    // Update the item quantity and recalculate final price
     updatedItems[index] = {
       ...item,
       quantity: newQuantity,
@@ -236,6 +239,67 @@ const SalesReport = () => {
     };
     
     setEditedItems(updatedItems);
+  };
+
+  // Handle update item rate
+  const handleUpdateItemRate = (index: number, newRate: number) => {
+    if (newRate < 0) return;
+
+    const updatedItems = [...editedItems];
+    const item = updatedItems[index];
+    
+    // Update the item rate and recalculate final price
+    updatedItems[index] = {
+      ...item,
+      sale_price: newRate,
+      item_final_price: newRate * item.quantity
+    };
+    
+    setEditedItems(updatedItems);
+  };
+
+  // Handle start editing rate
+  const handleStartEditingRate = (index: number, currentRate: number) => {
+    setEditingRateIndex(index);
+    setEditedRate(currentRate);
+  };
+
+  // Handle save rate changes
+  const handleSaveRateChanges = async (index: number) => {
+    handleUpdateItemRate(index, editedRate);
+    
+    // Calculate new totals
+    const updatedItems = [...editedItems];
+    updatedItems[index] = {
+      ...updatedItems[index],
+      sale_price: editedRate,
+      item_final_price: editedRate * updatedItems[index].quantity
+    };
+    
+    const total = updatedItems.reduce((sum, item) => sum + item.item_final_price, 0);
+    const discount = saleDetail ? saleDetail.total_discount : 0;
+    const final = total - discount;
+    
+    // Save to database
+    if (selectedSaleId) {
+      await updateSaleMutation.mutateAsync({
+        id: selectedSaleId,
+        updatedSale: {
+          total_amount: total,
+          total_discount: discount,
+          final_amount: final,
+          items: updatedItems
+        }
+      });
+    }
+    
+    setEditingRateIndex(null);
+  };
+
+  // Handle cancel rate editing
+  const handleCancelRateEditing = () => {
+    setEditingRateIndex(null);
+    setEditedRate(0);
   };
 
   // Handle remove item
@@ -280,31 +344,7 @@ const SalesReport = () => {
     
     const { total, discount, final } = calculateEditedTotals();
     
-    // Prepare inventory updates by comparing original vs edited items
-    const originalItems = saleDetail.items;
-    const inventoryUpdates: { productId: number, quantityChange: number }[] = [];
-    
-    // Calculate quantity changes for existing items
-    editedItems.forEach(editedItem => {
-      const originalItem = originalItems.find(oi => oi.product_id === editedItem.product_id);
-      if (originalItem) {
-        // Positive change means we need to add back to inventory, negative means remove from inventory
-        const quantityChange = originalItem.quantity - editedItem.quantity;
-        if (quantityChange !== 0) {
-          inventoryUpdates.push({ productId: editedItem.product_id, quantityChange });
-        }
-      }
-    });
-    
-    // Handle completely removed items - add their full quantity back to inventory
-    originalItems.forEach(originalItem => {
-      const stillExists = editedItems.some(ei => ei.product_id === originalItem.product_id);
-      if (!stillExists) {
-        inventoryUpdates.push({ productId: originalItem.product_id, quantityChange: originalItem.quantity });
-      }
-    });
-    
-    // Update the sale first
+    // Update the sale
     await updateSaleMutation.mutateAsync({
       id: selectedSaleId,
       updatedSale: {
@@ -314,26 +354,6 @@ const SalesReport = () => {
         items: editedItems
       }
     });
-    
-    // Update inventory quantities
-    // for (const update of inventoryUpdates) {
-    //   try {
-    //     // Get current quantity first
-    //     const currentProduct = await fetch(`http://localhost:3001/api/products/${update.productId}`);
-    //     if (currentProduct.ok) {
-    //       const productData = await currentProduct.json();
-    //       const newQuantity = productData.quantity + update.quantityChange;
-          
-    //       await updateQuantityMutation.mutateAsync({
-    //         id: update.productId,
-    //         quantity: newQuantity
-    //       });
-    //     }
-    //   } catch (error) {
-    //     console.error(`Failed to update inventory for product ${update.productId}:`, error);
-    //     toast.error(`Failed to update inventory for one of the products`);
-    //   }
-    // }
   };
   
   // Calculate SGST and CGST
@@ -923,7 +943,47 @@ const SalesReport = () => {
                               item.quantity
                             )}
                           </td>
-                          <td className="px-4 py-2 text-right">₹{item.sale_price.toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">
+                            {editingRateIndex === index ? (
+                              <div className="flex items-center justify-end gap-1">
+                                <Input
+                                  type="number"
+                                  value={editedRate}
+                                  onChange={(e) => setEditedRate(parseFloat(e.target.value) || 0)}
+                                  className="w-20 h-8 text-right"
+                                  step="0.01"
+                                  min="0"
+                                />
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleSaveRateChanges(index)}
+                                  className="h-8 px-2"
+                                >
+                                  <Check size={14} />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={handleCancelRateEditing}
+                                  className="h-8 px-2"
+                                >
+                                  <X size={14} />
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-end gap-1">
+                                <span>₹{item.sale_price.toFixed(2)}</span>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleStartEditingRate(index, item.sale_price)}
+                                  className="h-8 px-2"
+                                >
+                                  <Edit size={14} />
+                                </Button>
+                              </div>
+                            )}
+                          </td>
                           <td className="px-4 py-2 text-right">₹{item.item_final_price.toFixed(2)}</td>
                           {isEditing && (
                             <td className="px-4 py-2">
