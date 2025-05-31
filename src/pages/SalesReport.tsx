@@ -549,41 +549,41 @@ const SalesReport = () => {
             }
             /* Styles for Bill format */
             .receipt { 
-              border: 2px solid black; 
+              border: 1px solid black; 
               max-width: 800px; 
               margin: 0 auto; 
             }
-            .header { border-bottom: 2px solid black; padding: 10px; text-align: center; font-weight: normal; font-size: 18px; }
-            .contact-row { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 2px solid black; }
-            .contact-left { border-right: 2px solid black; padding: 10px; font-size: 14px; }
+            .header { border-bottom: 1px solid black; padding: 10px; text-align: center; font-weight: normal; font-size: 18px; }
+            .contact-row { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid black; }
+            .contact-left { border-right: 1px solid black; padding: 10px; font-size: 14px; }
             .contact-right { padding: 10px; text-align: right; font-size: 14px; }
-            .company-name { text-align: center; border-bottom: 2px solid black; padding: 10px; font-weight: bold; font-size: 24px; }
-            .address { text-align: center; border-bottom: 2px solid black; padding: 10px; font-size: 14px; }
-            .details-row { display: grid; grid-template-columns: 3fr 1fr; border-bottom: 2px solid black; }
-            .customer-details { border-right: 2px solid black; }
-            .customer-header { border-bottom: 2px solid black; padding: 10px; text-align: center; font-weight: bold; }
+            .company-name { text-align: center; border-bottom: 1px solid black; padding: 10px; font-weight: bold; font-size: 24px; }
+            .address { text-align: center; border-bottom: 1px solid black; padding: 10px; font-size: 14px; }
+            .details-row { display: grid; grid-template-columns: 3fr 1fr; border-bottom: 1px solid black; }
+            .customer-details { border-right: 1px solid black; }
+            .customer-header { border-bottom: 1px solid black; padding: 10px; text-align: center; font-weight: bold; }
             .customer-row { display: grid; grid-template-columns: 1fr 2fr; border-bottom: 1px solid black; }
             .customer-row:last-child { border-bottom: none; }
-            .customer-label { border-right: 2px solid black; padding: 10px; font-weight: bold; }
+            .customer-label { border-right: 1px solid black; padding: 10px; font-weight: bold; }
             .customer-value { padding: 10px; }
             .bill-info { display: flex; flex-direction: column; height: 100%; }
             .bill-info-item { flex: 1; padding: 10px; display: flex; align-items: center; }
-            .bill-info-item:first-child { border-bottom: 2px solid black; }
+            .bill-info-item:first-child { border-bottom: 1px solid black; } /* This was already 1px, remains 1px */
             table { width: 100%; border-collapse: collapse; } 
-            th, td { border: 2px solid black; padding: 10px; text-align: left; } 
+            th, td { border: 1px solid black; padding: 10px; text-align: left; } /* This was already 1px, remains 1px */
             th { background-color: #f5f5f5; font-weight: bold; } 
             .text-center { text-align: center; }
             .text-right { text-align: right; }
             .totals-section { display: grid; grid-template-columns: 1fr 1fr; }
-            .taxes { border-right: 2px solid black; display: flex; flex-direction: column; }
-            .tax-row { display: grid; grid-template-columns: 1fr 1fr; border-top: 2px solid black; border-bottom: 2px solid black; }
-            .tax-label { border-right: 2px solid black; padding: 10px; text-align: center; font-weight: bold; }
+            .taxes { border-right: 1px solid black; display: flex; flex-direction: column; } /* This was already 1px, remains 1px */
+            .tax-row { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid black; border-bottom: 1px solid black; } /* This was already 1px, remains 1px */
+            .tax-label { border-right: 1px solid black; padding: 10px; text-align: center; font-weight: bold; } /* This was already 1px, remains 1px */
             .tax-value { padding: 10px; text-align: center; }
-            .total-row { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 2px solid black; }
-            .total-label { border-right: 2px solid black; padding: 10px; text-align: right; font-weight: bold; }
+            .total-row { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid black; } /* This was already 1px, remains 1px */
+            .total-label { border-right: 1px solid black; padding: 10px; text-align: right; font-weight: bold; } /* This was already 1px, remains 1px */
             .total-value { padding: 10px; text-align: right; }
-            .footer { display: grid; grid-template-columns: 1fr 1fr; border-top: 2px solid black; }
-            .footer-left { border-right: 2px solid black; padding: 10px; text-align: center; }
+            .footer { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid black; } /* This was already 1px, remains 1px */
+            .footer-left { border-right: 1px solid black; padding: 10px; text-align: center; } /* This was already 1px, remains 1px */
             .footer-right { padding: 10px; text-align: center; display: flex; align-items: flex-end; justify-content: center; }
             @media print { 
               body { 
@@ -594,13 +594,13 @@ const SalesReport = () => {
               .no-print { display: none; } 
               .receipt { /* For Bill */
                 margin: 0 auto; 
-                border: 2px solid black !important; 
+                border: 1px solid black !important; 
                 box-shadow: none !important;
               }
               /* For Estimate */
-              div[style*="max-width: 800px"][style*="border: 2px solid black"] { 
+              div[style*="max-width: 800px"][style*="border: 2px solid black"] { /* Estimate border remains 2px unless specified otherwise */
                 margin: 0 auto !important; 
-                border: 2px solid black !important; 
+                /* border: 2px solid black !important; */ /* This line is commented out to not override estimate's specific border if it should be different */
                 box-shadow: none !important; 
               }
             }
@@ -1121,7 +1121,7 @@ const SalesReport = () => {
                     )}
                     
                     <div className="flex justify-between font-medium">
-                      <span>Grand Total(incl taxes):</span>
+                      <span>Grand Total:</span>
                       <span>₹{saleDetail.final_amount.toFixed(2)}</span>
                     </div>
                   </>

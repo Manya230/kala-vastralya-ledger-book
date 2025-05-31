@@ -57,6 +57,9 @@ function initDb() {
       )
     `);
 
+    // Ensure sales table includes customer_address and customer_gstin
+    // If this is the first run, these columns might be missing if not added here.
+    // For existing databases, an ALTER TABLE might be needed separately if they don't exist.
     db.run(`
       CREATE TABLE IF NOT EXISTS sales (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,9 +72,15 @@ function initDb() {
         date TEXT,
         total_amount REAL,
         total_discount REAL,
-        final_amount REAL
+        final_amount REAL,
+        customer_address TEXT,
+        customer_gstin TEXT 
       )
     `);
+    // Attempt to add columns if they don't exist (safe for SQLite)
+    db.run("ALTER TABLE sales ADD COLUMN customer_address TEXT", () => {});
+    db.run("ALTER TABLE sales ADD COLUMN customer_gstin TEXT", () => {});
+
 
     db.run(`
       CREATE TABLE IF NOT EXISTS sale_items (
@@ -627,7 +636,8 @@ app.post('/api/sales', (req, res) => {
                       db.get(`
                         SELECT 
                           s.id, s.type, s.number, s.customer_name, s.mobile, 
-                          s.payment_mode, s.remarks, s.date, s.total_amount, s.total_discount, s.final_amount
+                          s.payment_mode, s.remarks, s.date, s.total_amount, s.total_discount, s.final_amount,
+                          s.customer_address, s.customer_gstin
                         FROM sales s
                         WHERE s.id = ?
                       `, [saleId], (err, sale) => {
@@ -681,7 +691,8 @@ app.get('/api/sales', (req, res) => {
     let query = `
       SELECT 
         s.id, s.type, s.number, s.customer_name, s.mobile, 
-        s.payment_mode, s.date, s.total_amount, s.total_discount, s.final_amount
+        s.payment_mode, s.date, s.total_amount, s.total_discount, s.final_amount,
+        s.customer_address, s.customer_gstin
       FROM sales s
       WHERE 1=1
     `;
@@ -1301,8 +1312,18 @@ app.get('/api/export/sales', (req, res) => {
   try {
     let query = `
       SELECT 
-        s.id, s.type, s.number, s.customer_name, s.mobile, 
-        s.payment_mode, s.date, s.total_amount, s.total_discount, s.final_amount
+        s.id, 
+        s.date, 
+        s.number, 
+        s.type, 
+        s.customer_name, 
+        s.mobile, 
+        s.customer_address, 
+        s.customer_gstin,
+        s.payment_mode, 
+        s.total_amount, 
+        s.total_discount, 
+        s.final_amount
       FROM sales s
       WHERE 1=1
     `;
@@ -1335,58 +1356,88 @@ app.get('/api/export/sales', (req, res) => {
     
     db.all(query, queryParams, (err, sales) => {
       if (err) {
-        console.error('Error exporting sales:', err);
+        console.error('Error exporting sales:', err); // Log the actual SQL error
         return res.status(500).json({ error: 'Failed to export sales' });
       }
       
       if (sales.length === 0) {
-        return res.status(404).json({ error: 'No sales found to export' });
+        const workbook = xlsx.utils.book_new();
+        const worksheet = xlsx.utils.json_to_sheet([], {
+          header: [
+            "date", "number", "type", "customer_name", "mobile",
+            "customer_address", "customer gstin", "items",
+            "total_amount", "total_discount", "final_amount", "payment_mode"
+          ]
+        });
+        if (worksheet['A1']) worksheet['A1'].v = "No sales found to export"; 
+        else xlsx.utils.sheet_add_aoa(worksheet, [["No sales found to export"]], {origin: "A1"});
+
+        xlsx.utils.book_append_sheet(workbook, worksheet, 'Sales');
+        const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+        res.setHeader('Content-Disposition', 'attachment; filename=sales.xlsx');
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.send(buffer);
+        return;
       }
       
-      // Process each sale to get item counts
       let processed = 0;
-      sales.forEach((sale, index) => {
+      const salesWithItemCount = [...sales];
+
+      if (salesWithItemCount.length === 0) {
+        finishExport([]);
+        return;
+      }
+
+      salesWithItemCount.forEach((sale, index) => {
         db.all(`
           SELECT COUNT(*) as itemCount
           FROM sale_items
           WHERE sale_id = ?
-        `, [sale.id], (err, result) => {
-          if (!err && result && result[0]) {
-            sales[index].items = result[0].itemCount;
+        `, [sale.id], (itemErr, result) => {
+          if (!itemErr && result && result[0]) {
+            salesWithItemCount[index].itemCount = result[0].itemCount;
           } else {
-            sales[index].items = 0;
+            salesWithItemCount[index].itemCount = 0; // Default to 0 if error or no result
           }
           
           processed++;
-          if (processed === sales.length) {
-            // All sales processed, create Excel file
-            finishExport();
+          if (processed === salesWithItemCount.length) {
+            finishExport(salesWithItemCount);
           }
         });
       });
       
-      function finishExport() {
-        // Create a new workbook
+      function finishExport(finalSalesData) {
+        const dataForSheet = finalSalesData.map(sale => ({
+          'date': sale.date,
+          'number': sale.number,
+          'type': sale.type,
+          'customer_name': sale.customer_name,
+          'mobile': sale.mobile,
+          'customer_address': sale.customer_address,
+          'customer gstin': sale.customer_gstin,
+          'items': sale.itemCount, 
+          'total_amount': sale.total_amount,
+          'total_discount': sale.total_discount,
+          'final_amount': sale.final_amount,
+          'payment_mode': sale.payment_mode
+        }));
+
         const workbook = xlsx.utils.book_new();
-        const worksheet = xlsx.utils.json_to_sheet(sales);
+        const worksheet = xlsx.utils.json_to_sheet(dataForSheet, {
+          header: [ 
+            "date", "number", "type", "customer_name", "mobile", 
+            "customer_address", "customer gstin", "items", 
+            "total_amount", "total_discount", "final_amount", "payment_mode"
+          ]
+        });
         
-        // Add the worksheet to the workbook
         xlsx.utils.book_append_sheet(workbook, worksheet, 'Sales');
-        
-        // Create a buffer
         const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
         
-        // Set headers
         res.setHeader('Content-Disposition', 'attachment; filename=sales.xlsx');
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        
-        // Send the buffer
         res.send(buffer);
-      }
-      
-      // If no sales to process
-      if (sales.length === 0) {
-        finishExport();
       }
     });
   } catch (error) {

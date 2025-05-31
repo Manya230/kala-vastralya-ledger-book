@@ -331,13 +331,14 @@ const NewSale = () => {
               margin: 20px; 
               background: white; 
             }
+            /* Styles for Bill format */
             .receipt { 
-              border: 2px solid black; 
+              border: 1px solid black; 
               max-width: 800px; 
               margin: 0 auto; 
             }
             .header { 
-              border-bottom: 2px solid black; 
+              border-bottom: 1px solid black; 
               padding: 10px; 
               text-align: center; 
               font-weight: normal; 
@@ -346,10 +347,10 @@ const NewSale = () => {
             .contact-row { 
               display: grid; 
               grid-template-columns: 1fr 1fr; 
-              border-bottom: 2px solid black; 
+              border-bottom: 1px solid black; 
             }
             .contact-left { 
-              border-right: 2px solid black; 
+              border-right: 1px solid black; 
               padding: 10px; 
               font-size: 14px; 
             }
@@ -360,27 +361,27 @@ const NewSale = () => {
             }
             .company-name { 
               text-align: center; 
-              border-bottom: 2px solid black; 
+              border-bottom: 1px solid black; 
               padding: 10px; 
               font-weight: bold; 
               font-size: 24px; 
             }
             .address { 
               text-align: center; 
-              border-bottom: 2px solid black; 
+              border-bottom: 1px solid black; 
               padding: 10px; 
               font-size: 14px; 
             }
             .details-row { 
               display: grid; 
               grid-template-columns: 3fr 1fr; 
-              border-bottom: 2px solid black; 
+              border-bottom: 1px solid black; 
             }
             .customer-details { 
-              border-right: 2px solid black; 
+              border-right: 1px solid black; 
             }
             .customer-header { 
-              border-bottom: 2px solid black; 
+              border-bottom: 1px solid black; 
               padding: 10px; 
               text-align: center; 
               font-weight: bold; 
@@ -394,7 +395,7 @@ const NewSale = () => {
               border-bottom: none; 
             }
             .customer-label { 
-              border-right: 2px solid black; 
+              border-right: 1px solid black; 
               padding: 10px; 
               font-weight: bold; 
             }
@@ -411,7 +412,7 @@ const NewSale = () => {
               padding: 10px; 
               display: flex; 
               align-items: center; 
-              border-bottom: 2px solid black; 
+              border-bottom: 1px solid black; 
             }
             .bill-info-item:last-child { 
               border-bottom: none; 
@@ -421,7 +422,7 @@ const NewSale = () => {
               border-collapse: collapse; 
             }
             th, td { 
-              border: 2px solid black; 
+              border: 1px solid black; 
               padding: 10px; 
               text-align: left; 
             }
@@ -440,18 +441,18 @@ const NewSale = () => {
               grid-template-columns: 1fr 1fr; 
             }
             .taxes { 
-              border-right: 2px solid black; 
+              border-right: 1px solid black; 
               display: flex; /* For flex-grow to work */
               flex-direction: column; /* Stack items vertically */
             }
             .tax-row { 
               display: grid; 
               grid-template-columns: 1fr 1fr; 
-              border-top: 2px solid black; 
-              border-bottom: 2px solid black; 
+              border-top: 1px solid black; 
+              border-bottom: 1px solid black; 
             }
             .tax-label { 
-              border-right: 2px solid black; 
+              border-right: 1px solid black; 
               padding: 10px; 
               text-align: center; 
               font-weight: bold; 
@@ -463,10 +464,10 @@ const NewSale = () => {
             .total-row { 
               display: grid; 
               grid-template-columns: 1fr 1fr; 
-              border-bottom: 2px solid black; 
+              border-bottom: 1px solid black; 
             }
             .total-label { 
-              border-right: 2px solid black; 
+              border-right: 1px solid black; 
               padding: 10px; 
               text-align: right; 
               font-weight: bold; 
@@ -478,10 +479,10 @@ const NewSale = () => {
             .footer { 
               display: grid; 
               grid-template-columns: 1fr 1fr; 
-              border-top: 2px solid black; 
+              border-top: 1px solid black; 
             }
             .footer-left { 
-              border-right: 2px solid black; 
+              border-right: 1px solid black; 
               padding: 10px; 
               text-align: center; 
             }
@@ -493,8 +494,23 @@ const NewSale = () => {
               justify-content: center; 
             }
             @media print { 
-              body { margin: 0; } 
+              body { 
+                margin: 0; 
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              } 
               .no-print { display: none; } 
+              .receipt { /* For Bill */
+                margin: 0 auto; 
+                border: 1px solid black !important; 
+                box-shadow: none !important;
+              }
+              /* For Estimate */
+              div[style*="max-width: 800px"][style*="border: 2px solid black"] { /* Estimate border remains 2px */
+                margin: 0 auto !important; 
+                /* border: 2px solid black !important; */ /* This line is commented out to not override estimate's specific border if it should be different */
+                box-shadow: none !important; 
+              }
             }
           </style>
         </head>
