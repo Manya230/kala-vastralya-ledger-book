@@ -887,12 +887,12 @@ const SalesReport = () => {
               <div className="flex justify-between items-center mb-2">
                 <p className="font-medium">Items:</p>
                 {!isEditing ? (
-                  <Button onClick={() => setIsEditing(true)} variant="outline" size="sm">
+                  <Button onClick={() => setIsEditing(true)} variant="outline" size="sm" className="bg-gray-100 hover:bg-gray-200">
                     Edit Items
                   </Button>
                 ) : (
                   <div className="flex gap-2">
-                    <Button onClick={() => setIsEditing(false)} variant="outline" size="sm">
+                    <Button onClick={() => setIsEditing(false)} variant="outline" size="sm" className="bg-gray-100 hover:bg-gray-200">
                       Cancel
                     </Button>
                     <Button onClick={handleSaveChanges} size="sm">
@@ -950,7 +950,8 @@ const SalesReport = () => {
                                   type="number"
                                   value={editedRate}
                                   onChange={(e) => setEditedRate(parseFloat(e.target.value) || 0)}
-                                  className="w-20 h-8 text-right"
+                                  className="w-20 h-8 text-right [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                  style={{ MozAppearance: 'textfield' }}
                                   step="0.01"
                                   min="0"
                                 />
@@ -965,7 +966,7 @@ const SalesReport = () => {
                                   variant="outline"
                                   size="sm"
                                   onClick={handleCancelRateEditing}
-                                  className="h-8 px-2"
+                                  className="h-8 px-2 bg-gray-100 hover:bg-gray-200"
                                 >
                                   <X size={14} />
                                 </Button>
@@ -977,7 +978,7 @@ const SalesReport = () => {
                                   variant="outline"
                                   size="sm"
                                   onClick={() => handleStartEditingRate(index, item.sale_price)}
-                                  className="h-8 px-2"
+                                  className="h-8 px-2 bg-gray-100 hover:bg-gray-200"
                                 >
                                   <Edit size={14} />
                                 </Button>
@@ -1026,7 +1027,8 @@ const SalesReport = () => {
                               type="number"
                               value={editedDiscount}
                               onChange={(e) => setEditedDiscount(parseFloat(e.target.value) || 0)}
-                              className="w-20 h-8 text-right"
+                              className="w-20 h-8 text-right [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                              style={{ MozAppearance: 'textfield' }}
                               step="0.01"
                               min="0"
                             />
@@ -1044,7 +1046,7 @@ const SalesReport = () => {
                                 setIsEditingDiscount(false);
                                 setEditedDiscount(saleDetail.total_discount || 0);
                               }}
-                              className="h-8 px-2"
+                              className="h-8 px-2 bg-gray-100 hover:bg-gray-200"
                             >
                               <X size={14} />
                             </Button>
@@ -1056,7 +1058,7 @@ const SalesReport = () => {
                               variant="outline"
                               size="sm"
                               onClick={() => setIsEditingDiscount(true)}
-                              className="h-8 px-2"
+                              className="h-8 px-2 bg-gray-100 hover:bg-gray-200"
                             >
                               <Edit size={14} />
                             </Button>
@@ -1098,7 +1100,7 @@ const SalesReport = () => {
                           variant="outline"
                           size="sm"
                           onClick={() => setIsEditingDiscount(true)}
-                          className="h-8 px-2"
+                          className="h-8 px-2 bg-gray-100 hover:bg-gray-200"
                         >
                           <Edit size={14} />
                         </Button>
